@@ -1,48 +1,75 @@
 # REGOLITH — a Mars survey
 
-A hyper-real 3D Mars rover survey sim in the browser. Drive a Perseverance-class rover
-across a 2 km procedural quad — craters, a barchan dune field, an ancient lakebed, a
-ridged highland — through a 7-mission survey campaign on a real sol clock.
+A hyper-real 3D Mars rover survey sim that runs in a browser tab. Drive a
+Perseverance-class rover across a 2 km procedural quad — impact craters, a barchan dune
+field, an ancient lakebed, a ridged highland — through a seven-mission survey campaign on
+a real sol clock.
 
-**Live:** https://regolith.alyoechosys.dev
+**▸ Play: https://regolith.alyoechosys.dev**
+
+![The rover on the plains, chase camera](docs/chase.jpg)
 
 ## What's in it
 
-- Procedural 2048 m heightfield (domain-warped fBm, 34 impact craters with rim/ejecta,
-  dune band, playa basin, ridged highland) rendered as a two-tier surface: a 384 m
-  high-resolution shader-displaced tile riding the rover over a full-world far mesh,
-  with exact-match JS sampling for wheel physics.
-- Rocker-bogie rover: 6-wheel raycast suspension, turn-in-place, corner steering, slope
-  and sand slip, persistent wheel tracks GPU-splatted into a world texture (dust storms
-  slowly bury them), articulated arm with drill animation, mast that physically aims
-  where the mastcam looks, HGA gimbal.
-- Atmosphere: sol clock (1 sol ≈ 24.7 real minutes), sun arc with butterscotch days and
-  the real *blue* Martian sunset, stars + Phobos (rises in the west) + Deimos, roaming
-  photographable dust devils, regional dust storms foreshadowed by a pressure drop,
-  temperature/wind/pressure telemetry, RTG + battery power model with night heater load.
-- Ops-style HUD: compass tape, minimap + full topographic map (click to set waypoints),
-  tilt ball, power/net-watts, mission log, spectrometer readouts with real Mars
-  mineralogy, mastcam photo mode with a burned-in caption gallery.
-- Procedural WebAudio (wind, motor, drill, radio) — no audio assets. No network calls.
-  Saves to localStorage.
+**The world.** A 2048 m heightfield built as geology rather than noise: 34 impact craters
+with bowls, raised rims and ejecta blankets; a barchan dune field with shallow windward
+slopes and steep lee faces; a closed playa basin with polygonal desiccation cracks; a
+ridged highland. Rendered in two tiers — a high-resolution shader-displaced tile that rides
+under the rover over a full-world mesh — with an exactly matching JS sampler so the wheels
+feel every bump you can see.
+
+**The rover.** Rocker-bogie suspension articulating from six independent wheel contacts,
+turn-in-place via splayed corner wheels, sand slip and grade loss, gold MLI and a finned
+RTG, an arm that unfolds through real poses to drill, and a mast that physically aims where
+the mast camera looks. Wheel tracks persist in the world — and dust storms slowly bury them.
+
+**The atmosphere.** A real sol clock (one sol ≈ 24.7 real minutes), butterscotch days and
+the genuine *blue* Martian sunset glow, stars with Phobos rising in the west, roaming dust
+devils you can photograph, and regional dust storms announced by a falling barometer.
+Temperatures swing −85 °C to −8 °C, and the RTG-plus-battery model makes night heater load
+and steep climbs a real decision. Hold `T` to wait out the dark and recharge.
+
+| | |
+|---|---|
+| ![Two dust devils through the mast camera](docs/mastcam-dust-devils.jpg) | ![The Martian blue sunset](docs/sunset.jpg) |
+| Mastcam-Z catching two dust devils | Sunset — Mars scatters blue forward |
+| ![Topographic survey map](docs/survey-map.jpg) | ![Spectrometer readout](docs/spectrometer.jpg) |
+| Topographic map, click to set waypoints | PIXL/SHERLOC composite readout |
+
+**The survey.** Seven missions: systems checkout, crater-rim spectrometry, dune-crest
+sampling, lakebed coring, a summit relay deploy, photographing an active dust devil, and a
+final high-gain uplink. Findings name real Mars mineralogy. Progress saves locally.
 
 ## Controls
 
-W A S D drive (turns in place when stopped) · SPACE brake · SHIFT precision · mouse
-orbit + scroll zoom · C camera (chase/orbit/mastcam/hazcam) · F photo mode · G / click
-capture · E hold — contextual action (scan/drill/relay/uplink) · M map · L lamps ·
-T hold — wait ×300 · ESC pause.
+| | |
+|---|---|
+| `W A S D` | drive — turns in place when stopped |
+| `SPACE` / `SHIFT` | brake / precision mode |
+| mouse, scroll | orbit camera, zoom |
+| `C` | cycle camera — chase, orbit, mastcam, hazcam |
+| `F` · `G`/click | photo mode · capture |
+| `E` | contextual action — scan, drill, deploy, uplink |
+| `M` · `L` · `T` | map · work lamps · hold to wait (×300 time) |
+| `ESC` | pause, settings, uplink log |
 
-## Dev
+## Development
 
-```
+```bash
 npm install
-npm run dev     # esbuild serve on :8971
-npm run build   # writes public/dist/bundle.js (committed, so the box needs no npm)
+npm run dev       # esbuild dev server on 127.0.0.1:8971
+npm run build     # bundle + restamp cache-busting versions
+npm run verify    # gates — must be green before committing
 ```
 
-Deploy: push to `main`, then on the box `git -C ~/apps/regolith pull --ff-only`.
-Served statically by the shared app-host (no per-app service). Bump the `?v=` query
-on `styles.css` / `bundle.js` in `public/index.html` on every deploy.
+`public/dist/bundle.js` is committed deliberately (the deploy target runs no build step), so
+**always `npm run build` before committing** — `npm run verify` fails loudly if the bundle
+has drifted from `src/`, and `npm run verify:live` proves the deployed bytes match the repo.
 
-Stack: three.js r185, esbuild, vanilla everything else.
+Working on this? Read **[AGENTS.md](AGENTS.md)** first — module map, the invariants that
+cause action-at-a-distance bugs when broken, and the traps already paid for.
+[DESIGN.md](DESIGN.md) covers what the thing is and why it's built this way.
+
+Stack: [three.js](https://threejs.org) r185 + [esbuild](https://esbuild.github.io). No
+framework, no runtime dependencies, no asset files, no network calls — every mesh, texture
+and sound is generated in code.

@@ -4,8 +4,14 @@
   "description": "REGOLITH — a hyper-real 3D Mars rover survey sim",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonathanwxh-cell/regolith.git"
+  },
   "scripts": {
-    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=public/dist/bundle.js",
+    "build": "node tools/build.mjs",
+    "verify": "node tools/verify.mjs",
+    "verify:live": "node tools/verify.mjs --live",
     "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=public/dist/bundle.js --servedir=public --serve=127.0.0.1:8971"
   },
   "dependencies": {

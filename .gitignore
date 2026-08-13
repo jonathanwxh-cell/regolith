@@ -1,3 +1,8 @@
 node_modules/
+
+# tooling scratch — never commit
 .playwright-mcp/
+.impeccable/
 *.log
+shot-*.png
+shot-*.jpeg
