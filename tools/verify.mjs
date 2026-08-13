@@ -58,6 +58,23 @@ check("no external asset references", async () => {
   return "self-contained";
 });
 
+// --- Gate 3b: music tracks are present and non-trivial. The game fails
+// silent without them (by design), which means a checkout that lost
+// public/audio/ ships a silent build with no error anywhere.
+check("music tracks present", async () => {
+  const tracks = ["beacon", "drift", "nocturne", "haze"];
+  const sizes = [];
+  for (const name of tracks) {
+    const buf = await readFile(p(`public/audio/${name}.mp3`)).catch(() => null);
+    if (!buf || buf.length < 100_000) {
+      throw new Error(`public/audio/${name}.mp3 is ${buf ? buf.length + " bytes" : "MISSING"}.\n` +
+        `       Regenerate via generate_music — prompts are in AGENTS.md "Music".`);
+    }
+    sizes.push(Math.round(buf.length / 1024));
+  }
+  return tracks.map((t, i) => `${t} ${sizes[i]}kb`).join(", ");
+});
+
 // --- Gate 4: terrain height sampling agrees between JS (physics) and GLSL
 // (rendering). They are two implementations of one contract; if they drift the
 // rover floats or sinks. Cheap proxy: both read the same constants.

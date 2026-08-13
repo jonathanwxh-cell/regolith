@@ -71,5 +71,7 @@ cause action-at-a-distance bugs when broken, and the traps already paid for.
 [DESIGN.md](DESIGN.md) covers what the thing is and why it's built this way.
 
 Stack: [three.js](https://threejs.org) r185 + [esbuild](https://esbuild.github.io). No
-framework, no runtime dependencies, no asset files, no network calls — every mesh, texture
-and sound is generated in code.
+framework, no runtime dependencies, no external network calls — every mesh, texture and
+sound effect is generated in code. The one exception: four ambient music beds (title, day,
+night, dust storm) generated with MiniMax music-2.6 and crossfaded by context in-game.
+Music has its own volume slider in the pause menu.

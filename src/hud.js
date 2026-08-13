@@ -27,7 +27,7 @@ export class HUD {
       btnContinue: $("#btnContinue"), end: $("#endOverlay"), endStats: $("#endStats"),
       alert: $("#alertBanner"), fps: $("#fpsChip"), camChip: $("#camChip"),
       logList: $("#logList"), photoView: $("#photoView"), photoViewImg: $("#photoViewImg"),
-      qualitySel: $("#qualitySel"), volSlider: $("#volSlider"), beamChk: $("#beamChk"),
+      qualitySel: $("#qualitySel"), volSlider: $("#volSlider"), musicSlider: $("#musicSlider"), beamChk: $("#beamChk"),
       btnResume: $("#btnResume"), btnReset: $("#btnReset"), touch: $("#touchControls"),
       vignetteHint: $("#hintBar"),
     };
@@ -591,6 +591,7 @@ const TEMPLATE = /* html */`
             <option value="2" selected>HIGH</option><option value="3">ULTRA</option>
           </select></label>
         <label class="setRow">VOLUME <input id="volSlider" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+        <label class="setRow">MUSIC <input id="musicSlider" type="range" min="0" max="1" step="0.05" value="0.6"></label>
         <label class="setRow">NAV BEAM <input id="beamChk" type="checkbox" checked></label>
         <h3 style="margin-top:14px">CONTROLS</h3>
         <div class="ctrlList">

@@ -41,9 +41,12 @@ behaves like the real thing at the level a rover operator would notice**:
 
 ## Why these technical choices
 
-**Procedural everything.** No asset pipeline, no loading, no CDN, and the whole thing is a
-static directory the box serves as flat files. It also means the world is reproducible from
-a seed — a bug is always re-creatable.
+**Procedural everything** (with one deliberate exception). No asset pipeline, no CDN, and
+the whole thing is a static directory the box serves as flat files; the world is
+reproducible from a seed, so a bug is always re-creatable. The exception is music: four
+MiniMax-generated ambient beds, chosen over procedural music because a generative score
+good enough to disappear into the background is a project of its own. They stream lazily,
+crossfade by context (title / day / night / storm), and the game runs fine without them.
 
 **Two-tier terrain instead of a quadtree LOD.** A single high-resolution tile snapped to a
 grid under the rover, over one coarse full-world mesh, gets ~95% of the visual benefit of a

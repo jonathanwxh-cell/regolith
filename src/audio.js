@@ -72,6 +72,33 @@ export class AudioSys {
     this.drillGain.connect(this.master);
     drillSrc.start();
 
+    // --- terrain rumble: regolith crunch under the wheels (noise -> low LP),
+    // keyed to ground speed + suspension bump energy
+    this.rumbleLP = ctx.createBiquadFilter();
+    this.rumbleLP.type = "lowpass";
+    this.rumbleLP.frequency.value = 180;
+    this.rumbleGain = ctx.createGain();
+    this.rumbleGain.gain.value = 0;
+    const rumbleSrc = ctx.createBufferSource();
+    rumbleSrc.buffer = noiseBuf;
+    rumbleSrc.loop = true;
+    rumbleSrc.playbackRate.value = 0.6;
+    rumbleSrc.connect(this.rumbleLP);
+    this.rumbleLP.connect(this.rumbleGain);
+    this.rumbleGain.connect(this.master);
+    rumbleSrc.start();
+
+    // --- servo whine: mast/arm actuators
+    this.servoOsc = ctx.createOscillator();
+    this.servoOsc.type = "triangle";
+    this.servoOsc.frequency.value = 430;
+    this.servoGain = ctx.createGain();
+    this.servoGain.gain.value = 0;
+    this.servoOsc.connect(this.servoGain);
+    this.servoGain.connect(this.master);
+    this.servoOsc.start();
+
+    this._thumpAt = 0;
     this.ready = true;
   }
 
@@ -81,7 +108,7 @@ export class AudioSys {
   }
   setMuted(m) { this.muted = m; this.setVolume(this.volume); }
 
-  update(dt, { wind, speed, slipping, drilling, storm }) {
+  update(dt, { wind, speed, slipping, drilling, storm, bump = 0, servo = 0 }) {
     if (!this.ready) return;
     const t = this.ctx.currentTime;
     const windAmt = clamp((wind - 1.5) / 24, 0, 1);
@@ -98,6 +125,22 @@ export class AudioSys {
     this.motorLP.frequency.setTargetAtTime(160 + sp * 320, t, 0.2);
 
     this.drillGain.gain.setTargetAtTime(drilling ? 0.09 : 0, t, 0.1);
+
+    // regolith crunch: grows with speed, spikes with suspension activity
+    const bumpAmt = clamp(bump * 2.2, 0, 1);
+    const rg = sp > 0.02 ? sp * 0.05 + bumpAmt * 0.11 + (slipping ? 0.03 : 0) : 0;
+    this.rumbleGain.gain.setTargetAtTime(rg, t, 0.12);
+    this.rumbleLP.frequency.setTargetAtTime(140 + sp * 160 + bumpAmt * 240, t, 0.15);
+
+    // hard suspension hit -> low thud (rate-limited)
+    if (bumpAmt > 0.55 && sp > 0.1 && t - this._thumpAt > 0.18) {
+      this._thumpAt = t;
+      this.blip(64 + Math.random() * 22, 0.11, 0.1 + bumpAmt * 0.08, "sine");
+    }
+
+    // actuator whine while the arm or mast is moving
+    this.servoGain.gain.setTargetAtTime(clamp(servo, 0, 1) * 0.016, t, 0.08);
+    this.servoOsc.frequency.setTargetAtTime(390 + servo * 130 + Math.sin(t * 3.1) * 18, t, 0.1);
   }
 
   blip(freq = 880, dur = 0.07, vol = 0.12, type = "sine") {

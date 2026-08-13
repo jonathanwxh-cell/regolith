@@ -324,9 +324,14 @@ export class Rover {
       ys.push(T.heightAt(w.x, w.z));
     }
     const meanY = (ys[0] + ys[1] + ys[2] + ys[3] + ys[4] + ys[5]) / 6;
-    this.pos.y = lerp(this.pos.y, meanY, 1 - Math.exp(-dt * 9));
     const pitchT = Math.atan2(((ys[0] + ys[3]) - (ys[2] + ys[5])) / 2, WZ_F - WZ_R);
     const rollT = Math.atan2(((ys[3] + ys[4] + ys[5]) - (ys[0] + ys[1] + ys[2])) / 3, TRACK_W * 2);
+    // suspension activity metric for audio: how hard the chassis is being
+    // worked right now (attitude error + vertical chase), smoothed
+    const bumpInst = (Math.abs(pitchT - this.pitch) + Math.abs(rollT - this.roll)) * 2.4 +
+      Math.abs(meanY - this.pos.y) * 1.6;
+    this.bump = lerp(this.bump || 0, Math.min(bumpInst, 1.5), 1 - Math.exp(-dt * 6));
+    this.pos.y = lerp(this.pos.y, meanY, 1 - Math.exp(-dt * 9));
     this.pitch = lerp(this.pitch, pitchT, 1 - Math.exp(-dt * 7));
     this.roll = lerp(this.roll, rollT, 1 - Math.exp(-dt * 7));
     this.tiltDeg = Math.max(Math.abs(this.pitch), Math.abs(this.roll)) * 180 / Math.PI;
@@ -497,8 +502,11 @@ class MastController {
       ty = Math.sin(this.idleT * 0.16) * 0.9;
       tp = -0.12 + Math.sin(this.idleT * 0.09) * 0.1;
     }
-    this.yaw.rotation.y = lerp(this.yaw.rotation.y, ty, 1 - Math.exp(-dt * 2.2));
-    this.pitch.rotation.x = lerp(this.pitch.rotation.x, tp, 1 - Math.exp(-dt * 2.2));
+    const py = this.yaw.rotation.y, pp = this.pitch.rotation.x;
+    this.yaw.rotation.y = lerp(py, ty, 1 - Math.exp(-dt * 2.2));
+    this.pitch.rotation.x = lerp(pp, tp, 1 - Math.exp(-dt * 2.2));
+    // angular speed of the head, for the servo-whine SFX
+    this.rate = (Math.abs(this.yaw.rotation.y - py) + Math.abs(this.pitch.rotation.x - pp)) / Math.max(dt, 1e-3);
   }
 }
 

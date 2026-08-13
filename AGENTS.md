@@ -11,8 +11,10 @@ live      https://regolith.alyoechosys.dev
 ```
 
 Vanilla three.js r185 bundled by esbuild into one IIFE. No framework, no runtime
-dependencies, no network calls at runtime, no asset files — every texture, mesh and sound
-is generated in code. State persists to `localStorage` under `regolith-save-v2`.
+dependencies, no external network calls at runtime. Every texture, mesh and sound effect is
+generated in code; the only asset files are the four MiniMax-generated music tracks in
+`public/audio/` (same-origin, streamed — see **Music** below). State persists to
+`localStorage` under `regolith-save-v2`.
 
 ## Commands
 
@@ -38,7 +40,8 @@ npm run verify:live    # + prove the deployed bytes match this repo
 | `src/missions.js` | Campaign definitions, site resolution, props (lander/relay/nav beam), save shape | Mission content lives in `missionDefs()` |
 | `src/instruments.js` | Contextual action state machine, photo capture + gallery | Couples to mission task ids |
 | `src/hud.js` | All DOM (injected from one template string), canvas widgets, map bakes | No HTML in `index.html` beyond `#app` |
-| `src/audio.js` | Procedural WebAudio — wind, motor, drill, UI, radio | Must be `init()`d from a user gesture |
+| `src/audio.js` | Procedural WebAudio SFX — wind, motor, terrain rumble, thumps, servo, drill, UI, radio | Must be `init()`d from a user gesture |
+| `src/music.js` | Context-crossfaded music (title/day/night/storm) streaming from `public/audio/` | Own bus under `audio.master`; fails silent if files are missing |
 | `src/post.js` | EffectComposer: bloom → film grade → SMAA | |
 | `src/main.js` | Boot, input, game loop, persistence, quality tiers | Exposes `window.__RG` |
 
@@ -145,6 +148,29 @@ including where missions land — re-verify that M5's summit is drivable.
 **Tune the look** → terrain albedo in the `map_fragment` replacement in `terrain.js`; sky
 gradients in the dome fragment shader in `sky.js`; grade/bloom in `post.js`. Lighting intensities
 are in `Sky.update`.
+
+## Music
+
+Four ambient beds in `public/audio/`, generated with MiniMax music-2.6 via the
+`hetzner-deploy` MCP `generate_music` tool (`instrumental: true`, poll `check_media_job`,
+download the MinIO URL into `public/audio/`). They are content, not code — regenerate freely,
+keep the filenames:
+
+| File | Context | Prompt gist |
+|---|---|---|
+| `beacon.mp3` | title screen | quiet piano motif + warm strings, NASA-documentary, restrained swell |
+| `drift.mp3` | day | warm sparse analog pads, granular sand shimmer, meditative, no percussion |
+| `nocturne.mp3` | night (`nightF > 0.55`) | cold sub-drone, icy distant shimmer, extremely minimal |
+| `haze.mp3` | storm (`intensity > 0.45`) | low rumbling pressure drone, sits *under* the wind SFX |
+
+`src/music.js` streams them through `MediaElementAudioSourceNode` into its own gain bus under
+`audio.master`, crossfading ~4.5 s with 3 s hysteresis so dawn/dusk/storm edges don't flap.
+Contracts: **fail silent** — a missing/blocked file must never break the game (the `error`
+listener marks the track failed and it is simply never faded in); **gesture-gated** — nothing
+plays before `audio.init()`, which the title screen's first `pointerdown` triggers; **loop
+seams are masked by low levels** (`LEVEL` in `music.js`), these are beds, not foreground.
+`verify` gate 3b fails the build if any track is missing or truncated, because the fail-silent
+contract otherwise turns a lost `public/audio/` into a silent deploy with no error anywhere.
 
 ## Deploy
 

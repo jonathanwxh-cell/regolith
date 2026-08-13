@@ -10,6 +10,7 @@ import { Missions, SAVE_KEY } from "./missions.js";
 import { Instruments } from "./instruments.js";
 import { HUD } from "./hud.js";
 import { AudioSys } from "./audio.js";
+import { MusicSys, musicContext } from "./music.js";
 import { Post } from "./post.js";
 import { clamp } from "./noise.js";
 
@@ -54,6 +55,7 @@ const S = {
 
 let terrain, sky, rocks, rover, rig, dust, missions, instruments, post;
 const audio = new AudioSys();
+const music = new MusicSys(audio);
 
 // ---- input
 const keys = {};
@@ -190,7 +192,7 @@ function saveGame() {
         odo: rover.odometer, batt: rover.battery, lamps: rover.lampsOn,
       },
       sky: { sol: sky.sol, tSec: sky.tSec },
-      settings: { q: S.quality, vol: audio.volume, beam: missions.beamOn },
+      settings: { q: S.quality, vol: audio.volume, mvol: music.volume, beam: missions.beamOn },
       play: S.playSeconds,
       wpt: missions.customWaypoint,
     });
@@ -277,7 +279,7 @@ async function boot() {
     }
     hud.bootReady(!!loadSave());
     wireTitle();
-    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE };
+    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE, audio, music };
     requestAnimationFrame(loop);
   } catch (err) {
     hud.el.bootMsg.textContent = `BOOT FAULT: ${err.message}`;
@@ -287,6 +289,12 @@ async function boot() {
 }
 
 function wireTitle() {
+  // browsers only allow audio after a gesture: the first click/tap on the
+  // title screen unlocks it and starts the menu theme
+  hud.el.title.addEventListener("pointerdown", () => {
+    audio.init();
+    music.start();
+  }, { capture: true });
   hud.el.btnNew.addEventListener("click", () => {
     localStorage.removeItem(SAVE_KEY);
     startSim(null);
@@ -302,11 +310,13 @@ function wireTitle() {
     audio.uiTick();
   });
   hud.el.volSlider.addEventListener("input", (e) => audio.setVolume(parseFloat(e.target.value)));
+  hud.el.musicSlider.addEventListener("input", (e) => music.setVolume(parseFloat(e.target.value)));
   hud.el.beamChk.addEventListener("change", (e) => { missions.beamOn = e.target.checked; });
 }
 
 function startSim(save) {
   audio.init();
+  music.start();
   if (save) {
     missions.restore(save);
     if (save.rover) {
@@ -323,6 +333,8 @@ function startSim(save) {
       hud.el.qualitySel.value = String(S.quality);
       audio.setVolume(save.settings.vol ?? 0.8);
       hud.el.volSlider.value = String(audio.volume);
+      music.setVolume(save.settings.mvol ?? 0.6);
+      if (hud.el.musicSlider) hud.el.musicSlider.value = String(music.volume);
       missions.beamOn = save.settings.beam !== false;
       hud.el.beamChk.checked = missions.beamOn;
     }
@@ -351,6 +363,7 @@ function loop(now) {
   if (S.mode === "title") {
     // idle sunrise scene behind the title
     sky && rover && sky.update(dt, 4, camera, rover.pos);
+    music.update(dt, "title");
     if (rover) {
       rig.orbitT += dt * 0.05;
       const a = rig.orbitT;
@@ -411,7 +424,10 @@ function loop(now) {
   audio.update(dt, {
     wind: env.wind, speed: rover.v, slipping: rover.slipping,
     drilling: instruments.drilling, storm: sky.storm.intensity,
+    bump: rover.bump || 0,
+    servo: rover.armCtl.busy ? 0.9 : clamp((rover.mastCtl.rate || 0) * 1.6, 0, 0.8),
   });
+  music.update(dt, musicContext("sim", sky));
 
   // exposure: lift a touch at night
   renderer.toneMappingExposure = 1.12 + sky.nightF * 0.34;
