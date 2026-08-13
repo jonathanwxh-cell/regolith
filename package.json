@@ -1,0 +1,17 @@
+{
+  "name": "regolith",
+  "version": "1.0.0",
+  "description": "REGOLITH — a hyper-real 3D Mars rover survey sim",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=public/dist/bundle.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=public/dist/bundle.js --servedir=public --serve=127.0.0.1:8971"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
