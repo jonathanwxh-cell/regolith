@@ -211,10 +211,13 @@ export class Sky {
     const el = Math.asin(clamp(sd.y, -1, 1));
     const elDeg = el * 180 / Math.PI;
 
-    // phase factors
+    // phase factors — Martian twilight glows up to ~2 h after sunset (high
+    // dust scatters light onto the night side), so dusk decays slowly below
+    // the horizon and full night comes late
     this.dayF = smoothstep(-1, 10, elDeg) * smoothstep(-8, 4, elDeg);
-    this.duskF = Math.exp(-Math.pow((elDeg - 0.5) / 6.5, 2)) * 0.95;
-    this.nightF = smoothstep(2, -9, elDeg);
+    const duskW = elDeg > 0.5 ? 5.5 : 14;
+    this.duskF = Math.exp(-Math.pow((elDeg - 0.5) / duskW, 2)) * 0.95;
+    this.nightF = smoothstep(0, -15, elDeg);
     const storm = this.storm.intensity;
 
     this.domeUniforms.uSunDir.value.copy(sd);
@@ -264,7 +267,9 @@ export class Sky {
     );
     this.fog.color.lerp(_fogMix, 0.06);
     this.domeUniforms.uFogColor.value.copy(this.fog.color);
-    this.fog.density = 0.00028 + storm * 0.0046 + this.duskF * 0.00007;
+    // clear-sol visibility on Mars is tens of km; the 7 km rim should read
+    // as a faint silhouette, not vanish
+    this.fog.density = 0.00019 + storm * 0.0046 + this.duskF * 0.00006;
 
     // environment relight on sun-bucket change
     const key = `${Math.round(elDeg / 3)}|${Math.round(storm * 6)}|${Math.round(this.nightF * 4)}`;

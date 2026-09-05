@@ -117,7 +117,7 @@ export class AudioSys {
     this.windLP.frequency.setTargetAtTime(240 + windAmt * 900 + storm * 700, t, 0.5);
     this.windBP.frequency.setTargetAtTime(120 + windAmt * 500 + Math.sin(t * 0.7) * 60, t, 0.6);
 
-    const sp = clamp(Math.abs(speed) / 3.6, 0, 1);
+    const sp = clamp(Math.abs(speed) / 4.4, 0, 1);
     this.motorGain.gain.setTargetAtTime(sp > 0.02 ? 0.028 + sp * 0.06 : 0, t, 0.12);
     const f = 34 + sp * 60 + (slipping ? 22 : 0);
     this.motorOsc1.frequency.setTargetAtTime(f, t, 0.15);

@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import * as BGU from "three/addons/utils/BufferGeometryUtils.js";
 import { clamp, lerp } from "./noise.js";
+import { PLAY_R } from "./terrain.js";
 
 const WHEEL_R = 0.2625;
 const TRACK_W = 1.02;            // half-track (x)
@@ -282,11 +283,11 @@ export class Rover {
 
     // --- battery / limp
     this.limp = this.battery < 60;
-    const maxV = (this.limp ? 0.9 : 3.6) * sandFactor;
+    const maxV = (this.limp ? 0.9 : 4.4) * sandFactor;
 
     // --- longitudinal
     const th = this.blocked && input.throttle > 0 ? 0 : input.throttle;
-    let target = th * (th > 0 ? maxV : 1.2);
+    let target = th * (th > 0 ? maxV : 1.5);
     const slopeAcc = -G_MARS * Math.sin(groundPitch) * (this.v >= 0 ? 1 : -1) * 0.6;
     let acc = clamp((target - this.v) * 2.6, -2.6, 2.2) * sandFactor;
     if (input.brake) acc = clamp(-this.v * 6, -4, 4);
@@ -312,10 +313,15 @@ export class Rover {
     this.pos.addScaledVector(fwd, dist);
     this.odometer += Math.abs(dist);
     if (this.rocks) this.rocks.collide(this.pos, 1.45);
-    const B = 1000;
+    // the survey zone is the crater floor: radial clamp at the rim wall
     this.hitBoundary = false;
-    if (Math.abs(this.pos.x) > B) { this.pos.x = clamp(this.pos.x, -B, B); this.hitBoundary = true; this.v *= 0.2; }
-    if (Math.abs(this.pos.z) > B) { this.pos.z = clamp(this.pos.z, -B, B); this.hitBoundary = true; this.v *= 0.2; }
+    const rr = Math.hypot(this.pos.x, this.pos.z);
+    if (rr > PLAY_R) {
+      const k = PLAY_R / rr;
+      this.pos.x *= k; this.pos.z *= k;
+      this.hitBoundary = true;
+      this.v *= 0.2;
+    }
 
     // --- wheel contacts -> chassis pose
     const ys = [];
@@ -390,7 +396,7 @@ export class Rover {
     // --- power model (sim-time)
     const driving = Math.abs(th) > 0.04;
     let draw = 42;                                        // avionics
-    if (driving) draw += 70 + 210 * Math.abs(this.v) / 3.6 + Math.max(0, Math.sin(groundPitch)) * 240;
+    if (driving) draw += 70 + 210 * Math.abs(this.v) / 4.4 + Math.max(0, Math.sin(groundPitch)) * 240;
     if (this.slipping) draw += 60;
     if (this.lampsOn) draw += 28;
     if (env.tempC < -55) draw += 85; else if (env.tempC < -30) draw += 40;
@@ -432,7 +438,7 @@ export class Rover {
     list.length = 0;
     const speed = Math.abs(this.v);
     if (speed < 0.15 && !this.turnInPlace && !this.slipping) return list;
-    const strength = clamp(speed / 3.6, 0.12, 1) * (this.slipping ? 2.4 : 1) * (this.inSand ? 1.6 : 1);
+    const strength = clamp(speed / 4.4, 0.12, 1) * (this.slipping ? 2.4 : 1) * (this.inSand ? 1.6 : 1);
     for (let i = 0; i < 6; i++) {
       const w = this.wheelWorldXZ(i);
       list.push({ x: w.x, y: this.terrain.heightAt(w.x, w.z) + 0.1, z: w.z, s: strength });

@@ -42,7 +42,7 @@ npm run verify:live    # + prove the deployed bytes match this repo
 | `src/hud.js` | All DOM (injected from one template string), canvas widgets, map bakes | No HTML in `index.html` beyond `#app` |
 | `src/audio.js` | Procedural WebAudio SFX — wind, motor, terrain rumble, thumps, servo, drill, UI, radio | Must be `init()`d from a user gesture |
 | `src/music.js` | Context-crossfaded music (title/day/night/storm) streaming from `public/audio/` | Own bus under `audio.master`; fails silent if files are missing |
-| `src/post.js` | EffectComposer: bloom → film grade → SMAA | |
+| `src/post.js` | Self-contained pipeline: MSAA(4x) scene RT → quarter-res bloom → grade to canvas | No EffectComposer — see the header comment for why |
 | `src/main.js` | Boot, input, game loop, persistence, quality tiers | Exposes `window.__RG` |
 
 ## Contracts
@@ -51,7 +51,18 @@ Break one of these and the failure shows up somewhere unrelated. Each is a real 
 
 **Heading is +z-north.** `forward = (sin h, 0, cos h)`, so heading 0 points at **+z = North**,
 heading 90° at **+x = East**. The compass, minimap arrow, sun azimuth and waypoint bearings all
-assume this. The sun rises toward +x and sets toward −x.
+assume this. The sun rises toward +x and sets toward −x. **Both maps draw north-up**: the bake
+writes row 0 = +z, every overlay uses `y = center − dz`, and arrows rotate by `π − heading`.
+Flip any one of those independently and navigation silently lies.
+
+**One `onBeforeCompile` variant = one `customProgramCacheKey`.** The near-tile and far-tile
+materials inject *identical shader source text* and differ only through a closed-over `near`
+flag. three.js caches programs by source text — without distinct cache keys it hands one
+material the other's program, and the far mesh renders with the near tile's vertex
+displacement: its geometry smears across the sky as huge dark ribbons. This cost a long
+debugging session (2026-09-05) because which mesh got the wrong program depended on shader
+compile order, so hiding objects one at a time gave contradictory answers. If you add another
+material variant to `makeMaterial`, give it its own key.
 
 **Terrain height is `sampleMain() + sampleDetail()` — always both, everywhere.** This exists
 twice by necessity: in JS (`terrain.heightAt`, drives physics) and in GLSL (`totalH`, drives
@@ -140,10 +151,25 @@ out of the dune band unless the mission is about sand.
 on the rover should drive the physical mast via `rover.mastCtl.aim()` so the model matches the
 view.
 
-**Change the world** → all terrain shaping is in `Terrain.generate()`, layered: warped fBm →
-ridged highland → basin → dunes → edge wall → craters. `makeLayout(seed)` places the named
-features; `resolveSites` finds mission points from them. Changing the seed changes everything,
-including where missions land — re-verify that M5's summit is drivable.
+**Change the world** → all terrain shaping is in `Terrain.generate()`. It is
+**multi-resolution**: low-frequency bands (warp, regional relief, rolling plains, the rim's
+ridged texture) are evaluated on 256²/512² grids and bilinearly upsampled, and only
+high-frequency content runs per-texel at 2048² — that is why a 4 km world at 2 m/texel boots
+in ~25 s instead of minutes. Features are analytic on top: rim wall (radial, with a softened
+corridor and bench for M5) → feeder channel → delta fan with quantized strata benches →
+Kodiak butte → playa → Séítah dunes → ~120 craters. `generate()` also writes the **material
+mask texture** (R delta strata, G playa, B sand, A rim) that the terrain shader, the physics
+(`inDuneBand`/`inBasin`/`onDelta` = mask lookups) and the rock scatter all read — if you add
+a surface unit, add a channel or reuse one. `makeLayout(seed)` places the named features;
+`resolveSites` derives mission points from them (the delta drill site literally walks a ray
+until it falls off the strata mask). Changing the seed moves everything — re-verify M5's
+bench is drivable and the M4 ray still finds a scarp.
+
+**The world edge is the crater rim.** Playable radius `PLAY_R` (1960 m) with a radial clamp in
+`rover.js`; the in-field wall rises from r≈1880 so it reads as a distant rampart rather than a
+pit (first attempt started it at 1650 and the floor felt like standing in a hole); two
+silhouette rings at 4.6/7.2 km continue the rim beyond the heightfield. Jezero's real walls
+rise 800–1200 m — ours are compressed for a 4 km stage.
 
 **Tune the look** → terrain albedo in the `map_fragment` replacement in `terrain.js`; sky
 gradients in the dome fragment shader in `sky.js`; grade/bloom in `post.js`. Lighting intensities
@@ -224,6 +250,18 @@ because a WebGL app that dies mid-frame otherwise just shows a frozen canvas.
 
 Quality tiers (`QUALITY` in `main.js`) scale pixel ratio, shadow map size, post on/off and
 particle budget. Ultra targets a 1.5–2.0 device pixel ratio and a 4096 shadow map. The frame is
-dominated by the near tile (512² segments = ~524k triangles) and the terrain fragment shader,
-which samples the heightfield four extra times per pixel for normals. If you need frames back,
-`TILE_SEG` is the cheapest lever; the shader normal taps are the next.
+dominated by the near tile (512² segments = ~524k triangles), the 16 far tiles (frustum-culled,
+~263k triangles total when all visible) and the terrain fragment shader, which samples the
+heightfield four extra times per pixel for normals. Measured ~54 fps at HIGH on an Intel Arc
+iGPU. If you need frames back, `TILE_SEG` is the cheapest lever; the shader normal taps are
+next. Boot (terrain generation) is ~25 s, chunked with a progress bar — see the
+multi-resolution note above before "optimizing" it back to per-pixel everything.
+
+## References (the world is grounded in these)
+
+- Jezero delta front strata ~25 m thick; margin unit ~85 m ([RIMFAX delta/floor contact](https://www.science.org/doi/10.1126/sciadv.adi8339))
+- Kodiak remnant butte 80 m tall / 250 m wide ([Kodiak stratigraphy](https://essopenarchive.org/doi/full/10.22541/essoar.170688831.10785219/v1))
+- Flood-transported boulders to 1.5 m in delta strata ([Science: delta-lake system](https://www.science.org/doi/10.1126/science.abl4051))
+- Inner rim walls rise 800–1200 m above the floor ([Jezero, Wikipedia](https://en.wikipedia.org/wiki/Jezero_(crater)))
+- Séítah: dune maze exposing the floor's oldest unit; Máaz lava flows above it ([imaging results](https://www.science.org/doi/10.1126/sciadv.abo4856))
+- Twilight glows up to ~2 h after sunset from high-altitude dust ([NASA: Mars sunsets](https://science.nasa.gov/solar-system/planets/mars/what-does-a-sunrise-sunset-look-like-on-mars/))

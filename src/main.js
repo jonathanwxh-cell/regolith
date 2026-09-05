@@ -36,7 +36,7 @@ renderer.domElement.classList.add("webgl");
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.12, 9000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.12, 16000);
 
 // ---- state
 const S = {
@@ -279,7 +279,7 @@ async function boot() {
     }
     hud.bootReady(!!loadSave());
     wireTitle();
-    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE, audio, music };
+    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE, audio, music, post };
     requestAnimationFrame(loop);
   } catch (err) {
     hud.el.bootMsg.textContent = `BOOT FAULT: ${err.message}`;
@@ -415,9 +415,9 @@ function loop(now) {
 
   // trail
   const lastP = S.trail[S.trail.length - 1];
-  if (!lastP || Math.hypot(rover.pos.x - lastP[0], rover.pos.z - lastP[1]) > 4) {
+  if (!lastP || Math.hypot(rover.pos.x - lastP[0], rover.pos.z - lastP[1]) > 7) {
     S.trail.push([rover.pos.x, rover.pos.z]);
-    if (S.trail.length > 1600) S.trail.shift();
+    if (S.trail.length > 1800) S.trail.shift();
   }
 
   ambientAlerts(env);
@@ -487,7 +487,7 @@ function ambientAlerts(env) {
   }
   if (rover.hitBoundary && !S.boundWarn) {
     S.boundWarn = true;
-    hud.notify("QUAD BOUNDARY — survey zone ends here", "warn");
+    hud.notify("RIM WALL — the survey zone is the crater floor", "warn");
     setTimeout(() => { S.boundWarn = false; }, 6000);
   }
 }

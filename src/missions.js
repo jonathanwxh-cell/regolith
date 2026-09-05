@@ -4,32 +4,42 @@ import * as THREE from "three";
 import { clamp } from "./noise.js";
 import { MATS } from "./rover.js";
 
-export const SAVE_KEY = "regolith-save-v2";
+export const SAVE_KEY = "regolith-save-v3";
 
 export function resolveSites(terrain) {
   const L = terrain.layout;
-  // crater rim point on the lander-facing side
+  // fresh-crater rim point on the lander-facing side
   const dl = new THREE.Vector2(L.lander.x - L.halo.x, L.lander.z - L.halo.z).normalize();
   const rim = { x: L.halo.x + dl.x * L.halo.r * 1.05, z: L.halo.z + dl.y * L.halo.r * 1.05 };
-  // dune crest: local max near dune center
-  let dc = { x: L.dune.cx, z: L.dune.cz, h: -Infinity };
-  for (let dz = -70; dz <= 70; dz += 6) {
-    for (let dx = -70; dx <= 70; dx += 6) {
-      const h = terrain.heightAt(L.dune.cx + dx, L.dune.cz + dz);
-      if (h > dc.h) dc = { x: L.dune.cx + dx, z: L.dune.cz + dz, h };
+  // dune crest: local max near the Seitah field center
+  let dc = { x: L.seitah.x, z: L.seitah.z, h: -Infinity };
+  for (let dz = -90; dz <= 90; dz += 6) {
+    for (let dx = -90; dx <= 90; dx += 6) {
+      const h = terrain.heightAt(L.seitah.x + dx, L.seitah.z + dz);
+      if (h > dc.h) dc = { x: L.seitah.x + dx, z: L.seitah.z + dz, h };
     }
   }
-  // ridge summit: max in a box around the ridge center
-  let rs = { x: L.ridge.x, z: L.ridge.z, h: -Infinity };
-  for (let dz = -240; dz <= 240; dz += 9) {
-    for (let dx = -240; dx <= 240; dx += 9) {
-      const x = L.ridge.x + dx, z = L.ridge.z + dz;
-      if (Math.abs(x) > 940 || Math.abs(z) > 940) continue;
+  // delta drill: walk a ray out of the fan and stop just past the scarp base
+  const D = L.delta;
+  const rayA = 0.14;
+  let delta = { x: D.apexX + Math.cos(rayA) * D.radius, z: D.apexZ + Math.sin(rayA) * D.radius };
+  for (let ra = D.radius * 0.55; ra < D.radius * 1.35; ra += 8) {
+    const x = D.apexX + Math.cos(rayA) * ra, z = D.apexZ + Math.sin(rayA) * ra;
+    if (terrain.maskAtRaw(x, z, 0) < 0.3) { // fell off the strata: scarp base
+      delta = { x: x + Math.cos(rayA) * 42, z: z + Math.sin(rayA) * 42 };
+      break;
+    }
+  }
+  // rim bench: flattest high point near the overlook shoulder
+  let rs = { x: L.overlook.x, z: L.overlook.z, h: -Infinity };
+  for (let dz = -70; dz <= 70; dz += 7) {
+    for (let dx = -70; dx <= 70; dx += 7) {
+      const x = L.overlook.x + dx, z = L.overlook.z + dz;
       const h = terrain.heightAt(x, z);
-      if (h > rs.h) rs = { x, z, h };
+      if (h > rs.h && terrain.slopeAt(x, z) < 0.2) rs = { x, z, h };
     }
   }
-  return { lander: L.lander, rim, dune: dc, basin: { x: L.basin.x, z: L.basin.z }, ridge: rs };
+  return { lander: L.lander, rim, dune: dc, delta, ridge: rs };
 }
 
 export function missionDefs(sites) {
@@ -57,39 +67,39 @@ export function missionDefs(sites) {
       },
     },
     {
-      id: "M3", title: "SERPENT DUNE FIELD", site: sites.dune, radius: 14,
+      id: "M3", title: "SÉÍTAH SANDS", site: sites.dune, radius: 18,
       tasks: [
         { id: "reach", label: "Reach the dune crest (watch for slip)" },
-        { id: "scan", label: "Scan the crest sand [E]" },
+        { id: "scan", label: "Scan an outcrop between the ripples [E]" },
       ],
-      brief: "Active transverse dunes. Traction will be poor — keep momentum, avoid lee faces.",
-      done: "Fine unweathered basaltic sand, chloride traces. The dunes are migrating ~0.4 m per Earth year.",
+      brief: "A maze of transverse dunes — and between them, the oldest rock exposed on this floor. Keep momentum, avoid the lee faces.",
+      done: "Olivine-rich cumulate under the sand: this floor is layered igneous rock, older than everything above it. The dunes are migrating ~0.4 m per Earth year.",
       science: {
-        name: "CREST SAND", flavor: "Well-sorted basaltic sand, 150–300 µm. Chloride salts hint at vanished brines.",
-        comp: [["SiO2", 43], ["FeOT", 18], ["MgO", 9], ["Chlorides", 4], ["Pyroxene", 30], ["Magnetite", 6]],
+        name: "INTER-RIPPLE OUTCROP", flavor: "Coarse olivine cumulate with pyroxene, lightly dust-mantled. The lowest exposed unit of the floor — an igneous basement.",
+        comp: [["Olivine", 34], ["Pyroxene", 26], ["SiO2", 38], ["FeOT", 17], ["MgO", 14], ["Chlorides", 3]],
       },
     },
     {
-      id: "M4", title: "ELYSIUM PLAYA", site: sites.basin, radius: 16,
+      id: "M4", title: "THE DELTA FRONT", site: sites.delta, radius: 18,
       tasks: [
-        { id: "reach", label: "Descend to the lakebed floor" },
-        { id: "drill", label: "Core sample the playa [E — long op]" },
+        { id: "reach", label: "Reach the scarp at the delta front" },
+        { id: "drill", label: "Core the basal strata [E — long op]" },
       ],
-      brief: "A closed basin with polygonal fractures — a candidate paleolake. Coring authorized.",
-      done: "SMECTITE CLAYS + evaporites in the core. This was standing water. Flagship result — uplink priority.",
+      brief: "A river once entered this crater through the western wall and built that fan. The front scarp exposes ~25 m of layered strata — foreset beds, and boulder layers from flood events. Coring authorized at the base.",
+      done: "Clinoform foresets over lakebed muds: SMECTITE CLAYS, carbonate cement, and a conglomerate of transported boulders. Sustained river inflow into a standing lake — with violent floods late. Flagship result; uplink priority.",
       science: {
-        name: "PLAYA CORE 0-6 cm", flavor: "Smectite clay laminae over evaporite crusts. Sustained standing water, then slow desiccation.",
-        comp: [["Smectite", 24], ["SiO2", 31], ["Sulfates", 14], ["Chlorides", 6], ["FeOT", 12], ["Jarosite", 5]],
+        name: "DELTA BASAL CORE", flavor: "Smectite-rich mudstone under cross-bedded sandstone; carbonate cement; rounded clasts to 1.5 m nearby speak of flood transport.",
+        comp: [["Smectite", 22], ["SiO2", 30], ["Carbonate", 11], ["Sulfates", 9], ["FeOT", 13], ["Jarosite", 4]],
       },
     },
     {
-      id: "M5", title: "THARSIS OVERLOOK", site: sites.ridge, radius: 16,
+      id: "M5", title: "RIM BENCH RELAY", site: sites.ridge, radius: 18,
       tasks: [
-        { id: "reach", label: "Climb to the ridge summit" },
+        { id: "reach", label: "Climb the wall corridor to the bench" },
         { id: "relay", label: "Deploy the UHF relay [E]" },
       ],
-      brief: "Highest point of the quad. Grades to 25°+ — manage battery and pick your line.",
-      done: "Relay deployed and locked. Line-of-sight to the whole quad. Downhill from here.",
+      brief: "A shoulder on the inner rim wall, ~90 m over the floor. The full wall climbs another kilometer above it — this is as high as wheels go. Long grades: watch tilt and battery.",
+      done: "Relay deployed and locked, line-of-sight to the whole quad. From up here you can see the delta, the dunes, and your own tracks. Downhill from here.",
     },
     {
       id: "M6", title: "EPHEMERAL", site: null, radius: 0,

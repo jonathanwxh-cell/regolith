@@ -40,7 +40,8 @@ export class HUD {
       if (!this.mapClickCb) return;
       const r = this.el.mapCanvas.getBoundingClientRect();
       const u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
-      this.mapClickCb((u - 0.5) * WORLD, (v - 0.5) * WORLD);
+      this.mapClickCb((u - 0.5) * WORLD, (0.5 - v) * WORLD); // north-up
+
     });
     if (("ontouchstart" in window) && matchMedia("(pointer: coarse)").matches) {
       this.el.touch.classList.remove("hidden");
@@ -57,8 +58,9 @@ export class HUD {
     const data = img.data;
     const { minH, maxH } = terrain;
     const lx = -0.62, lz = -0.62, ly = 0.5; // NW light
+    // north-up: canvas row 0 is +z (north)
     for (let j = 0; j < N; j++) {
-      const wz = (j / N - 0.5) * WORLD;
+      const wz = (0.5 - j / N) * WORLD;
       for (let i = 0; i < N; i++) {
         const wx = (i / N - 0.5) * WORLD;
         const e = 4;
@@ -69,7 +71,9 @@ export class HUD {
         nx /= nl; ny /= nl; nz /= nl;
         const shade = clamp(0.42 + 1.0 * (nx * lx + ny * ly + nz * lz), 0.1, 1.5);
         const h = terrain.sampleMain(wx, wz);
-        const t = Math.pow((h - minH) / (maxH - minH), 1.15);
+        // hypsometric tint stretched over the FLOOR, not the 400 m rim wall —
+        // normalizing by maxH would flatten the whole floor to one dark tone
+        const t = Math.pow(clamp((h - minH) / 150, 0, 1), 1.05);
         let r = lerp(64, 205, t) * shade;
         let gg = lerp(34, 128, t) * shade;
         let b = lerp(22, 88, t) * shade;
@@ -257,10 +261,10 @@ export class HUD {
     const S = cv.width;
     g.clearRect(0, 0, S, S);
     if (!this.mapBake) return;
-    const span = 420; // meters shown
+    const span = 470; // meters shown
     const bakePx = this.mapBake.width / WORLD;
     const cx = (rover.pos.x / WORLD + 0.5) * this.mapBake.width;
-    const cz = (rover.pos.z / WORLD + 0.5) * this.mapBake.height;
+    const cz = (0.5 - rover.pos.z / WORLD) * this.mapBake.height;
     const half = span * bakePx / 2;
     g.save();
     g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); g.clip();
@@ -270,7 +274,7 @@ export class HUD {
     g.fillRect(0, 0, S, S);
     const toMap = (wx, wz) => [
       S / 2 + (wx - rover.pos.x) / span * S,
-      S / 2 + (wz - rover.pos.z) / span * S,
+      S / 2 - (wz - rover.pos.z) / span * S,
     ];
     // sites
     const m = missions.cur();
@@ -286,10 +290,10 @@ export class HUD {
       g.strokeStyle = "#7dd3fc";
       g.strokeRect(x - 3, y - 3, 6, 6);
     }
-    // rover arrow
+    // rover arrow (north-up: heading 0 points up-screen)
     g.save();
     g.translate(S / 2, S / 2);
-    g.rotate(rover.heading + Math.PI);
+    g.rotate(Math.PI - rover.heading);
     g.fillStyle = "#ffffff";
     g.beginPath();
     g.moveTo(0, 6); g.lineTo(-4, -4); g.lineTo(0, -1.6); g.lineTo(4, -4);
@@ -311,12 +315,12 @@ export class HUD {
     cv.width = cv.height = size;
     const g = cv.getContext("2d");
     g.drawImage(this.mapBake, 0, 0, size, size);
-    const toMap = (wx, wz) => [(wx / WORLD + 0.5) * size, (wz / WORLD + 0.5) * size];
-    // grid every 250m
+    const toMap = (wx, wz) => [(wx / WORLD + 0.5) * size, (0.5 - wz / WORLD) * size];
+    // grid every 500m
     g.strokeStyle = "#ffffff18";
     g.fillStyle = "#e8dcc866";
     g.font = "10px ui-monospace, monospace";
-    for (let m = -750; m <= 750; m += 250) {
+    for (let m = -1500; m <= 1500; m += 500) {
       const [x] = toMap(m, 0), [, y] = toMap(0, m);
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x, size); g.stroke();
       g.beginPath(); g.moveTo(0, y); g.lineTo(size, y); g.stroke();
@@ -358,11 +362,11 @@ export class HUD {
       g.font = "10px ui-monospace, monospace";
       g.fillText("WPT", x + 9, y + 4);
     }
-    // rover
+    // rover (north-up)
     const [rx, ry] = toMap(rover.pos.x, rover.pos.z);
     g.save();
     g.translate(rx, ry);
-    g.rotate(rover.heading + Math.PI);
+    g.rotate(Math.PI - rover.heading);
     g.fillStyle = "#ffffff";
     g.beginPath();
     g.moveTo(0, 8); g.lineTo(-5, -5); g.lineTo(0, -2); g.lineTo(5, -5);

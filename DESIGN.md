@@ -5,11 +5,15 @@ What this is and why it's built this way. For *how to work on it*, see
 
 ## Premise
 
-You operate a Perseverance-class rover on a 2 km² quad of Mars across a multi-sol survey
-campaign. Seven objectives — checkout, crater-rim spectrometry, dune sampling, lakebed
-coring, a summit relay deploy, atmospheric photography, and a final uplink. Open-world
-driving between them, a real sol clock with day/night, weather, and an RTG + battery model
-that makes night operations and steep grades an actual decision rather than a texture.
+You operate a Perseverance-class rover on the floor of a large impact crater — a 4 km
+quad modeled on Jezero, Perseverance's real site, with its signature landmarks: the
+west-wall river delta with terraced strata, a feeder channel through the rim, a remnant
+butte, a Séítah-style dune maze, a playa, and the crater's own rim as the horizon. Seven
+objectives — checkout, crater-rim spectrometry, dune-outcrop sampling, coring the delta
+front, a relay deploy on a rim bench, atmospheric photography, and a final uplink.
+Open-world driving between them, a real sol clock with day/night, weather, and an RTG +
+battery model that makes night operations and steep grades an actual decision rather than
+a texture. Grounded numbers and sources are listed in AGENTS.md "References".
 
 ## What "hyper-real" means here
 

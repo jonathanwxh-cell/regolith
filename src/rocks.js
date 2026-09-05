@@ -4,8 +4,8 @@ import * as THREE from "three";
 import { Simplex2, clamp } from "./noise.js";
 import { WORLD } from "./terrain.js";
 
-const CHUNKS = 8;                 // 8x8 grid
-const PER_CHUNK = 420;
+const CHUNKS = 12;                // 12x12 grid over the 4 km quad
+const PER_CHUNK = 520;
 
 export class Rocks {
   constructor(terrain, seed = 7) {
@@ -40,25 +40,42 @@ export class Rocks {
           attempts++;
           const x = cx0 + rnd() * chunkSpan;
           const z = cz0 + rnd() * chunkSpan;
-          if (Math.abs(x) > 980 || Math.abs(z) > 980) continue;
-          // density mask: noise patches + ejecta rings, sparse on dunes/playa
+          if (Math.hypot(x, z) > 2010) continue;             // outside the wall
+          // density: noise patches + crater ejecta + geologic units
           let density = 0.35 + 0.65 * Math.max(0, S.fbm(x * 0.004, z * 0.004, 3));
           for (const c of terrain.craters) {
             const d = Math.hypot(x - c.x, z - c.z) / c.r;
             if (d < 0.85) density *= 0.25;                    // clean bowls
             else if (d < 2.0) density += 0.5 * Math.exp(-(d - 1) * 2.0); // ejecta
           }
-          if (terrain.inDuneBand(x, z)) density *= 0.15;
-          if (terrain.inBasin(x, z)) density *= 0.3;
+          const mDelta = terrain.maskAtRaw(x, z, 0);
+          const mSand = terrain.maskAtRaw(x, z, 2);
+          const mRim = terrain.maskAtRaw(x, z, 3);
+          const slope = 1 - terrain.normalAt(x, z, 2.5).y;
+          // flood-boulder talus below the delta scarps (clasts to ~1.5 m)
+          const talus = mDelta > 0.04 && mDelta < 0.6 && slope > 0.06;
+          if (talus) density *= 2.6;
+          else if (mDelta > 0.6) density *= 0.3;              // dust-mantled top
+          if (mRim > 0.2) density *= 1.7;                     // wall scree
+          if (terrain.inBasin(x, z)) density *= 0.22;         // playa is clean
+          let slab = false;
+          if (mSand > 0.45) {
+            // Seitah: mostly sand, but the oldest unit outcrops between ripples
+            if (rnd() < 0.1) slab = true;
+            else density *= 0.1;
+          }
           if (Math.hypot(x - L.lander.x, z - L.lander.z) < 14) continue;
-          if (rnd() > density * 0.95) continue;
+          if (!slab && rnd() > density * 0.85) continue;
 
-          const big = rnd() < 0.035;
-          const s = big ? 0.85 + rnd() * 1.9 : 0.1 + Math.pow(rnd(), 2.2) * 0.7;
-          const y = terrain.heightAt(x, z) - s * 0.42;
+          const big = !slab && rnd() < (talus ? 0.09 : 0.035);
+          const s = slab ? 1.3 + rnd() * 1.8
+            : big ? 0.85 + rnd() * (talus ? 1.05 : 1.9)       // talus clasts <=1.5 m
+            : 0.1 + Math.pow(rnd(), 2.2) * 0.7;
+          const y = terrain.heightAt(x, z) - s * (slab ? 0.6 : 0.42);
           dummy.position.set(x, y, z);
-          dummy.rotation.set(rnd() * 0.5 - 0.25, rnd() * Math.PI * 2, rnd() * 0.5 - 0.25);
-          dummy.scale.set(s * (0.8 + rnd() * 0.5), s * (0.65 + rnd() * 0.5), s * (0.8 + rnd() * 0.5));
+          dummy.rotation.set(rnd() * (slab ? 0.12 : 0.5) - (slab ? 0.06 : 0.25), rnd() * Math.PI * 2, rnd() * (slab ? 0.12 : 0.5) - (slab ? 0.06 : 0.25));
+          if (slab) dummy.scale.set(s * (1.2 + rnd()), s * 0.3, s * (1.2 + rnd()));
+          else dummy.scale.set(s * (0.8 + rnd() * 0.5), s * (0.65 + rnd() * 0.5), s * (0.8 + rnd() * 0.5));
           dummy.updateMatrix();
           mesh.setMatrixAt(placed, dummy.matrix);
           placed++;

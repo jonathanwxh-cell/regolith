@@ -1,30 +1,37 @@
 # REGOLITH — a Mars survey
 
 A hyper-real 3D Mars rover survey sim that runs in a browser tab. Drive a
-Perseverance-class rover across a 2 km procedural quad — impact craters, a barchan dune
-field, an ancient lakebed, a ridged highland — through a seven-mission survey campaign on
+Perseverance-class rover across a 4 km quad set on the floor of a large impact crater —
+modeled on Jezero, Perseverance's real site — through a seven-mission survey campaign on
 a real sol clock.
 
 **▸ Play: https://regolith.alyoechosys.dev**
 
-![The rover on the plains, chase camera](docs/chase.jpg)
+![Approaching the delta front — terraced strata with the rim wall behind](docs/delta-front.jpg)
 
 ## What's in it
 
-**The world.** A 2048 m heightfield built as geology rather than noise: 34 impact craters
-with bowls, raised rims and ejecta blankets; a barchan dune field with shallow windward
-slopes and steep lee faces; a closed playa basin with polygonal desiccation cracks; a
-ridged highland. Rendered in two tiers — a high-resolution shader-displaced tile that rides
-under the rover over a full-world mesh — with an exactly matching JS sampler so the wheels
-feel every bump you can see.
+**The world.** A 4096 m heightfield built as Jezero-style geology rather than noise: a
+west-wall **river delta** whose front scarp exposes ~30 m of terraced strata (Jezero's
+delta strata run ~25 m, with flood-carried boulders to 1.5 m — both are in the game), fed
+by a channel cut through the crater wall; a Kodiak-style remnant butte standing alone on
+the floor; a Séítah-style dune maze with the floor's oldest rock outcropping between the
+ripples; a cracked playa; ~120 impact craters; and the crater's own inner rim wall as the
+world edge, its silhouette continuing to ridgelines kilometers beyond (Jezero's walls
+rise 800–1200 m). Rendered in two tiers — a high-resolution shader-displaced tile riding
+under the rover over a tiled full-world mesh — with an exactly matching JS sampler so the
+wheels feel every bump you can see.
+
+![The rim massif across the crater floor](docs/rim-massif.jpg)
 
 **The rover.** Rocker-bogie suspension articulating from six independent wheel contacts,
 turn-in-place via splayed corner wheels, sand slip and grade loss, gold MLI and a finned
 RTG, an arm that unfolds through real poses to drill, and a mast that physically aims where
 the mast camera looks. Wheel tracks persist in the world — and dust storms slowly bury them.
 
-**The atmosphere.** A real sol clock (one sol ≈ 24.7 real minutes), butterscotch days and
-the genuine *blue* Martian sunset glow, stars with Phobos rising in the west, roaming dust
+**The atmosphere.** A real sol clock (one sol ≈ 24.7 real minutes), butterscotch days,
+the genuine *blue* Martian sunset glow with twilight that lingers up to two hours the way
+high-altitude dust really keeps it lit, stars with Phobos rising in the west, roaming dust
 devils you can photograph, and regional dust storms announced by a falling barometer.
 Temperatures swing −85 °C to −8 °C, and the RTG-plus-battery model makes night heater load
 and steep climbs a real decision. Hold `T` to wait out the dark and recharge.

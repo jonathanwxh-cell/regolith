@@ -246,7 +246,7 @@ class DustDevil {
   }
 
   spawnAt() {
-    this.pos.set((Math.random() - 0.5) * 1500, 0, (Math.random() - 0.5) * 1500);
+    this.pos.set((Math.random() - 0.5) * 3000, 0, (Math.random() - 0.5) * 3000);
     this.height = 90 + Math.random() * 110;
     this.radius = 3 + Math.random() * 4.5;
     this.life = 90 + Math.random() * 160;
