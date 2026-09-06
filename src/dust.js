@@ -246,7 +246,10 @@ class DustDevil {
   }
 
   spawnAt() {
-    this.pos.set((Math.random() - 0.5) * 3000, 0, (Math.random() - 0.5) * 3000);
+    for (let tries = 0; tries < 40; tries++) {
+      this.pos.set((Math.random() - 0.5) * 5600, 0, (Math.random() - 0.5) * 5600);
+      if (this.terrain.isPlayable(this.pos.x, this.pos.z)) break;
+    }
     this.height = 90 + Math.random() * 110;
     this.radius = 3 + Math.random() * 4.5;
     this.life = 90 + Math.random() * 160;

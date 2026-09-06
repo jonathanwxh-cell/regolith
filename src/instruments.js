@@ -25,6 +25,7 @@ export class Instruments {
     const tasks = m.tasks;
     const stt = this.missions.curTasks();
     const near = m.site ? Math.hypot(m.site.x - r.pos.x, m.site.z - r.pos.z) < m.radius : false;
+    const pa = this.pois && this.pois.contextAction(r, this.story);
     for (let i = 0; i < tasks.length; i++) {
       if (stt[i]) continue;
       const t = tasks[i];
@@ -39,14 +40,15 @@ export class Instruments {
       if (t.id === "relay" && near) return { type: "relay", label: "HOLD E — DEPLOY RELAY" };
       if (t.id === "uplink" && near) return { type: "uplink", label: "HOLD E — BEGIN UPLINK" };
     }
-    return null;
+    return pa || null;
   }
 
-  start(type) {
+  start(type, poi) {
     const durs = { scan: 7, drill: 16, relay: 6, uplink: 20 };
-    this.action = { type, t: 0, dur: durs[type] || 6 };
+    this.action = { type, t: 0, dur: poi ? poi.action.dur : (durs[type] || 6), poi };
     if (type === "scan") this.rover.armCtl.setPose("reach");
     if (type === "drill") this.rover.armCtl.setPose("drill");
+    if (type === "poi") this.rover.armCtl.setPose(poi.action.pose || "reach");
     if (type === "uplink") this.aimHGA = true;
     this.audio.uiTick();
   }
@@ -90,6 +92,15 @@ export class Instruments {
   finish(type, events) {
     const m = this.missions.cur();
     this.rover.armCtl.setPose("stowed");
+    if (type === "poi") {
+      const poi = this.action.poi;
+      this.audio.confirm();
+      this.pois.complete(poi, this.story, {
+        rover: this.rover, audio: this.audio,
+        science: (sci) => { this.lastScience = sci; this.missions.samples++; events.science(sci); this.story.offerSample(sci.name, poi.id, { audio: this.audio }); },
+      });
+      return;
+    }
     if (type === "scan" || type === "drill") {
       this.lastScience = m.science || null;
       this.missions.samples++;
@@ -97,6 +108,7 @@ export class Instruments {
       this.audio.confirm();
       if (this.lastScience) events.science(this.lastScience);
       events.task(`${type === "drill" ? "Core" : "Scan"} complete — ${m.science ? m.science.name : m.id}`);
+      if (this.lastScience && this.story) this.story.offerSample(this.lastScience.name, m.id, { audio: this.audio });
     } else if (type === "relay") {
       this.missions.spawnRelay();
       this.missions.taskDone("relay");
@@ -142,7 +154,8 @@ export class Instruments {
       events.task("Surface photo returned");
       events.checkAdvance();
     }
-    if (m && m.id === "M6" && devilInfo && devilInfo.ok && this.missions.taskDone("devil")) {
+    if (devilInfo && devilInfo.ok && this.story) this.story.setFlag("devil_photo");
+    if (m && m.id === "M7" && devilInfo && devilInfo.ok && this.missions.taskDone("devil")) {
       events.task(`Dust devil imaged at ${Math.round(devilInfo.dist)} m`);
       events.checkAdvance();
     }

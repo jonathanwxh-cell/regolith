@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import * as BGU from "three/addons/utils/BufferGeometryUtils.js";
 import { clamp, lerp } from "./noise.js";
-import { PLAY_R } from "./terrain.js";
+import { PLAY_R } from "./terrain.js"; // (reference only; the clamp is zone-based)
 
 const WHEEL_R = 0.2625;
 const TRACK_W = 1.02;            // half-track (x)
@@ -313,12 +313,15 @@ export class Rover {
     this.pos.addScaledVector(fwd, dist);
     this.odometer += Math.abs(dist);
     if (this.rocks) this.rocks.collide(this.pos, 1.45);
-    // the survey zone is the crater floor: radial clamp at the rim wall
+    // playable zones = crater floor + inlet canyon + plateau; anything else
+    // (rim walls, the skylight pit, the world edge) bounces you back to the
+    // last valid position
     this.hitBoundary = false;
-    const rr = Math.hypot(this.pos.x, this.pos.z);
-    if (rr > PLAY_R) {
-      const k = PLAY_R / rr;
-      this.pos.x *= k; this.pos.z *= k;
+    if (this.terrain.isPlayable(this.pos.x, this.pos.z)) {
+      this._lastValid = this._lastValid || new THREE.Vector3();
+      this._lastValid.copy(this.pos);
+    } else if (this._lastValid) {
+      this.pos.x = this._lastValid.x; this.pos.z = this._lastValid.z;
       this.hitBoundary = true;
       this.v *= 0.2;
     }

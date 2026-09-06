@@ -30,6 +30,9 @@ export class HUD {
       qualitySel: $("#qualitySel"), volSlider: $("#volSlider"), musicSlider: $("#musicSlider"), beamChk: $("#beamChk"),
       btnResume: $("#btnResume"), btnReset: $("#btnReset"), touch: $("#touchControls"),
       vignetteHint: $("#hintBar"),
+      comms: $("#comms"), commsBody: $("#commsBody"), commsBadge: $("#commsBadge"),
+      choiceBar: $("#choiceBar"), choicePrompt: $("#choicePrompt"), choiceA: $("#choiceA"), choiceB: $("#choiceB"),
+      tubeList: $("#tubeList"), discList: $("#discList"),
     };
     this.notifTimers = [];
     this._lastText = 0;
@@ -50,6 +53,7 @@ export class HUD {
 
   // ---------------------------------------------------------------- bakes
   bakeMap(terrain) {
+    this.terrainRef = terrain;
     const N = 1024;
     const c = document.createElement("canvas");
     c.width = c.height = N;
@@ -73,7 +77,8 @@ export class HUD {
         const h = terrain.sampleMain(wx, wz);
         // hypsometric tint stretched over the FLOOR, not the 400 m rim wall —
         // normalizing by maxH would flatten the whole floor to one dark tone
-        const t = Math.pow(clamp((h - minH) / 150, 0, 1), 1.05);
+        // two-piece stretch: floor relief in the lower 70%, plateau in the top 30%
+        const t = h < minH + 120 ? clamp((h - minH) / 120, 0, 1) * 0.7 : 0.7 + clamp((h - minH - 120) / 180, 0, 1) * 0.3;
         let r = lerp(64, 205, t) * shade;
         let gg = lerp(34, 128, t) * shade;
         let b = lerp(22, 88, t) * shade;
@@ -125,7 +130,7 @@ export class HUD {
         this.el.missionTasks.innerHTML = m.tasks.map((t, i) =>
           `<li class="${stt[i] ? "done" : ""}">${stt[i] ? "◆" : "◇"} ${t.label}</li>`).join("");
         const d = missions.distTo(rover.pos);
-        this.el.missionDist.textContent = d != null ? `${d < 999 ? d.toFixed(0) + " m" : (d / 1000).toFixed(2) + " km"} to waypoint` : "—";
+        this.el.missionDist.textContent = d != null ? `${d < 999 ? d.toFixed(0) + " m" : (d / 1000).toFixed(2) + " km"} to waypoint` : (m.id === "M7" ? "vortex window 10:00–16:30 LMST — watch the plains" : "—");
       } else {
         this.el.missionTitle.textContent = "SURVEY COMPLETE";
         this.el.missionTasks.innerHTML = "<li class='done'>◆ Free roam — the quad is yours</li>";
@@ -140,7 +145,7 @@ export class HUD {
 
     this.drawCompass(rover, missions);
     this.drawTilt(rover);
-    this.drawMinimap(rover, missions, sky);
+    this.drawMinimap(rover, missions, sky, ctx.markers || []);
 
     // context prompt + action ring
     const act = instruments.action;
@@ -255,7 +260,7 @@ export class HUD {
     g.fillText(`${rover.tiltDeg.toFixed(0)}°`, C, S - 2);
   }
 
-  drawMinimap(rover, missions, sky) {
+  drawMinimap(rover, missions, sky, markers = []) {
     const cv = this.el.minimap;
     const g = cv.getContext("2d");
     const S = cv.width;
@@ -290,6 +295,12 @@ export class HUD {
       g.strokeStyle = "#7dd3fc";
       g.strokeRect(x - 3, y - 3, 6, 6);
     }
+    for (const mk of markers) {
+      const [x, y] = toMap(mk.x, mk.z);
+      if (x < 6 || x > S - 6 || y < 6 || y > S - 6) continue;
+      g.fillStyle = mk.done ? "#86d67c" : mk.discovered ? "#e8dcc8" : "#c9a0ff";
+      g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y); g.closePath(); g.fill();
+    }
     // rover arrow (north-up: heading 0 points up-screen)
     g.save();
     g.translate(S / 2, S / 2);
@@ -309,7 +320,7 @@ export class HUD {
     g.fillText("N", S / 2, 9);
   }
 
-  drawFullMap(rover, missions, trail) {
+  drawFullMap(rover, missions, trail, markers = []) {
     const cv = this.el.mapCanvas;
     const size = Math.min(innerWidth, innerHeight) - 110;
     cv.width = cv.height = size;
@@ -320,7 +331,7 @@ export class HUD {
     g.strokeStyle = "#ffffff18";
     g.fillStyle = "#e8dcc866";
     g.font = "10px ui-monospace, monospace";
-    for (let m = -1500; m <= 1500; m += 500) {
+    for (let m = -3000; m <= 3000; m += 500) {
       const [x] = toMap(m, 0), [, y] = toMap(0, m);
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x, size); g.stroke();
       g.beginPath(); g.moveTo(0, y); g.lineTo(size, y); g.stroke();
@@ -352,7 +363,7 @@ export class HUD {
       }
       g.fillStyle = state === "active" ? "#ffb86b" : "#e8dcc8aa";
       g.font = "11px ui-monospace, monospace";
-      g.fillText(`${m.id} ${m.title}`, x + 11, y + 4 + (m.id === "M7" ? 13 : 0)); // M7 shares the lander site with M1
+      g.fillText(`${m.id} ${m.title}`, x + 11, y + 4 + (m.id === "M8" ? 13 : 0)); // M8 shares the lander site with M1
     });
     if (missions.customWaypoint) {
       const [x, y] = toMap(missions.customWaypoint.x, missions.customWaypoint.z);
@@ -361,6 +372,14 @@ export class HUD {
       g.fillStyle = "#7dd3fc";
       g.font = "10px ui-monospace, monospace";
       g.fillText("WPT", x + 9, y + 4);
+    }
+    for (const mk of markers) {
+      const [x, y] = toMap(mk.x, mk.z);
+      g.fillStyle = mk.done ? "#86d67c" : mk.discovered ? "#e8dcc8" : "#c9a0ff";
+      g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 5, y); g.lineTo(x, y + 5); g.lineTo(x - 5, y); g.closePath(); g.fill();
+      g.font = "9px ui-monospace, monospace";
+      g.fillStyle = mk.discovered ? "#e8dcc8aa" : "#c9a0ffaa";
+      g.fillText(mk.discovered ? mk.title : "?", x + 8, y + 3);
     }
     // rover (north-up)
     const [rx, ry] = toMap(rover.pos.x, rover.pos.z);
@@ -372,6 +391,45 @@ export class HUD {
     g.moveTo(0, 8); g.lineTo(-5, -5); g.lineTo(0, -2); g.lineTo(5, -5);
     g.closePath(); g.fill();
     g.restore();
+  }
+
+  // ---------------------------------------------------------------- comms
+  commsLine(char, text) {
+    const body = this.el.commsBody;
+    const line = document.createElement("div");
+    line.className = "commsLine";
+    line.innerHTML = `<span class="who" style="color:${char.color};border-color:${char.color}66">${char.name}</span><span class="txt"></span>`;
+    body.appendChild(line);
+    while (body.children.length > 5) body.firstChild.remove();
+    const txt = line.querySelector(".txt");
+    let i = 0;
+    const step = () => {
+      i = Math.min(text.length, i + 2);
+      txt.textContent = text.slice(0, i);
+      if (i < text.length) line._t = setTimeout(step, 26);
+    };
+    step();
+    this.el.comms.classList.add("live");
+    clearTimeout(this._commsFade);
+    this._commsFade = setTimeout(() => this.el.comms.classList.remove("live"), 16000);
+  }
+  showChoice(c) {
+    this.el.choicePrompt.textContent = c.prompt;
+    this.el.choiceA.textContent = c.a;
+    this.el.choiceB.textContent = c.b;
+    this.el.choiceBar.classList.remove("hidden");
+  }
+  hideChoice() { this.el.choiceBar.classList.add("hidden"); }
+  setBlackout(on) { this.el.commsBadge.classList.toggle("hidden", !on); }
+  rebakeSoon() { if (this.terrainRef) setTimeout(() => this.bakeMap(this.terrainRef), 300); }
+  refreshInventory(story, pois) {
+    this.el.tubeList.innerHTML = story.tubes.length
+      ? story.tubes.map((t, i) => `<li>${i + 1}. ${t.name}</li>`).join("")
+      : "<li style='opacity:.5'>no tubes sealed yet — 10 available</li>";
+    const found = pois.list.filter((p) => p.discovered);
+    this.el.discList.innerHTML = found.length
+      ? found.map((p) => `<li>${p.title}${p.done ? " ✓" : ""}</li>`).join("")
+      : "<li style='opacity:.5'>nothing yet — the quad is bigger than the missions</li>";
   }
 
   // --------------------------------------------------------------- panels
@@ -567,6 +625,15 @@ const TEMPLATE = /* html */`
   </div>
   <div id="galleryStrip"></div>
 
+  <div id="comms" class="panel">
+    <div class="pTitle">COMMS <span id="commsBadge" class="chip hidden">NO UPLINK — CONJUNCTION</span></div>
+    <div id="commsBody"></div>
+  </div>
+  <div id="choiceBar" class="hidden">
+    <div id="choicePrompt"></div>
+    <div class="choiceOpts"><span id="choiceA" data-key="[1]"></span><span id="choiceB" data-key="[2]"></span></div>
+  </div>
+
   <div id="alertBanner" class="hidden"></div>
   <div id="fpsChip" class="hidden">60</div>
   <div id="hintBar">C camera · F photo · E action · M map · ESC menu</div>
@@ -586,6 +653,10 @@ const TEMPLATE = /* html */`
       <div class="menuCol">
         <h3>UPLINK LOG</h3>
         <ul id="logList"></ul>
+        <h3 style="margin-top:14px">SAMPLE TUBES</h3>
+        <ul id="tubeList" class="invList"></ul>
+        <h3 style="margin-top:14px">DISCOVERIES</h3>
+        <ul id="discList" class="invList"></ul>
       </div>
       <div class="menuCol">
         <h3>SETTINGS</h3>

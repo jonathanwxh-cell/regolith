@@ -1,9 +1,9 @@
 # REGOLITH — a Mars survey
 
 A hyper-real 3D Mars rover survey sim that runs in a browser tab. Drive a
-Perseverance-class rover across a 4 km quad set on the floor of a large impact crater —
-modeled on Jezero, Perseverance's real site — through a seven-mission survey campaign on
-a real sol clock.
+Perseverance-class rover across a 6 km sandbox — a crater modeled on Jezero, Perseverance's
+real site, the inlet canyon breaching its western wall, and the plateau beyond — through an
+eight-mission survey campaign on a real sol clock, with a story buried in the sand.
 
 **▸ Play: https://regolith.alyoechosys.dev**
 
@@ -11,16 +11,18 @@ a real sol clock.
 
 ## What's in it
 
-**The world.** A 4096 m heightfield built as Jezero-style geology rather than noise: a
-west-wall **river delta** whose front scarp exposes ~30 m of terraced strata (Jezero's
-delta strata run ~25 m, with flood-carried boulders to 1.5 m — both are in the game), fed
-by a channel cut through the crater wall; a Kodiak-style remnant butte standing alone on
-the floor; a Séítah-style dune maze with the floor's oldest rock outcropping between the
-ripples; a cracked playa; ~120 impact craters; and the crater's own inner rim wall as the
-world edge, its silhouette continuing to ridgelines kilometers beyond (Jezero's walls
-rise 800–1200 m). Rendered in two tiers — a high-resolution shader-displaced tile riding
-under the rover over a tiled full-world mesh — with an exactly matching JS sampler so the
-wheels feel every bump you can see.
+**The world.** A 6144 m heightfield built as Jezero-style geology rather than noise. In the
+crater: a west-wall **river delta** whose front scarp exposes ~30 m of terraced strata
+(Jezero's delta strata run ~25 m, with flood-carried boulders to 1.5 m — both are in the
+game); a Kodiak-style remnant butte standing alone on the floor; a Séítah-style dune maze
+with the floor's oldest rock outcropping between the ripples; a cracked playa; ~190 impact
+craters; and the crater's own inner rim wall (Jezero's walls rise 800–1200 m). The wall is
+breached on the west by an **inlet canyon** — a graded causeway that climbs 140 m from the
+delta apex to a **plateau** of flat-topped mesas, the terraced shoreline of a second, higher
+paleolake, a lava-tube skylight, and ridgelines continuing kilometers beyond. Rendered in
+two tiers — a high-resolution shader-displaced tile riding under the rover over a tiled
+full-world mesh — with an exactly matching JS sampler so the wheels feel every bump you can
+see.
 
 ![The rim massif across the crater floor](docs/rim-massif.jpg)
 
@@ -43,9 +45,36 @@ and steep climbs a real decision. Hold `T` to wait out the dark and recharge.
 | ![Topographic survey map](docs/survey-map.jpg) | ![Spectrometer readout](docs/spectrometer.jpg) |
 | Topographic map, click to set waypoints | PIXL/SHERLOC composite readout |
 
-**The survey.** Seven missions: systems checkout, crater-rim spectrometry, dune-crest
-sampling, lakebed coring, a summit relay deploy, photographing an active dust devil, and a
-final high-gain uplink. Findings name real Mars mineralogy. Progress saves locally.
+**The survey.** Eight missions: systems checkout, crater-rim spectrometry, dune-crest
+sampling, coring the delta front, a rim-bench relay deploy, the climb up the inlet canyon to
+the plateau, photographing an active dust devil, and a final high-gain uplink. Findings name
+real Mars mineralogy. Progress saves locally.
+
+**The story.** You are not the first rover here. ARGO-1 landed on the plateau beyond the
+western rim years ago, drove down the inlet on its own extended mission, and went silent in
+the sands when a global dust storm starved its solar arrays. Your survey finds it piece by
+piece — the parachute and backshell on the crater floor, its faint wheel tracks still leading
+into the dunes, the rover itself tilted in a sand trap — and offers a choice: spend arm time
+and battery to pull its memory core, and its team's final uplinks come back one at a time,
+sol by sol. Three named ops voices — a flight director, a geologist, a systems engineer —
+react to everything you find, and the geology escalates from "nice clays" to something the
+geologist won't say out loud on an open loop.
+
+![ARGO-1's recovered logs arriving on the comms loop](docs/comms.jpg)
+
+**The sandbox.** Beyond the spine: eighteen-odd discoveries off the map's edges — an iron
+meteorite, a hematite-spherule field, a ventifact garden, a lava-tube skylight, shoreline
+terraces from a second, higher lake, mesas, viewpoints, ARGO's landing platform and sample
+cache, and one very rectangular rock. Ten sample tubes force choices about what goes home.
+World events happen to you: a meteorite strike punches a fresh crater into the terrain and
+you can go scan the ice it excavated, Phobos transits the sun for forty seconds, solar
+conjunction cuts you off from Earth for a full sol (ARGO's logs keep you company), and a
+global dust storm shuts the sky. The ending composes itself from what you actually did.
+
+| | |
+|---|---|
+| ![The inlet canyon causeway](docs/inlet-canyon.jpg) | ![The plateau beyond the rim](docs/plateau.jpg) |
+| Up the inlet canyon toward the plateau | The plateau: mesas and the old shoreline |
 
 ## Controls
 
@@ -79,6 +108,8 @@ cause action-at-a-distance bugs when broken, and the traps already paid for.
 
 Stack: [three.js](https://threejs.org) r185 + [esbuild](https://esbuild.github.io). No
 framework, no runtime dependencies, no external network calls — every mesh, texture and
-sound effect is generated in code. The one exception: four ambient music beds (title, day,
-night, dust storm) generated with MiniMax music-2.6 and crossfaded by context in-game.
-Music has its own volume slider in the pause menu.
+sound effect is generated in code. The one exception: five ambient music beds (title, day,
+night, dust storm, and ARGO's ghost theme) — four generated with MiniMax music-2.6, the
+fifth with Suno via [sunoapi.org](https://sunoapi.org) (`tools/suno.mjs`; MiniMax's music
+API has since been withdrawn) — crossfaded by context in-game. Music has its own volume
+slider in the pause menu.

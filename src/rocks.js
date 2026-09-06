@@ -4,8 +4,8 @@ import * as THREE from "three";
 import { Simplex2, clamp } from "./noise.js";
 import { WORLD } from "./terrain.js";
 
-const CHUNKS = 12;                // 12x12 grid over the 4 km quad
-const PER_CHUNK = 520;
+const CHUNKS = 16;                // 16x16 grid over the 6 km quad
+const PER_CHUNK = 420;
 
 export class Rocks {
   constructor(terrain, seed = 7) {
@@ -40,7 +40,8 @@ export class Rocks {
           attempts++;
           const x = cx0 + rnd() * chunkSpan;
           const z = cz0 + rnd() * chunkSpan;
-          if (Math.hypot(x, z) > 2010) continue;             // outside the wall
+          if (!terrain.isPlayable(x, z) && !terrain.inValley(x, z)) continue; // walls, pit, off-map
+          const plateau = terrain.onPlateau(x, z);
           // density: noise patches + crater ejecta + geologic units
           let density = 0.35 + 0.65 * Math.max(0, S.fbm(x * 0.004, z * 0.004, 3));
           for (const c of terrain.craters) {
@@ -57,6 +58,7 @@ export class Rocks {
           if (talus) density *= 2.6;
           else if (mDelta > 0.6) density *= 0.3;              // dust-mantled top
           if (mRim > 0.2) density *= 1.7;                     // wall scree
+          if (plateau) density *= 1.35;                       // blocky lava plain
           if (terrain.inBasin(x, z)) density *= 0.22;         // playa is clean
           let slab = false;
           if (mSand > 0.45) {

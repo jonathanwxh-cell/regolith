@@ -12,6 +12,8 @@ import { HUD } from "./hud.js";
 import { AudioSys } from "./audio.js";
 import { MusicSys, musicContext } from "./music.js";
 import { Post } from "./post.js";
+import { Story } from "./story.js";
+import { POIs } from "./pois.js";
 import { clamp } from "./noise.js";
 
 const app = document.getElementById("app");
@@ -53,7 +55,7 @@ const S = {
   stormPrev: "idle",
 };
 
-let terrain, sky, rocks, rover, rig, dust, missions, instruments, post;
+let terrain, sky, rocks, rover, rig, dust, missions, instruments, post, story, pois;
 const audio = new AudioSys();
 const music = new MusicSys(audio);
 
@@ -109,6 +111,8 @@ function onKey(code, e) {
       hud.notify(rover.lampsOn ? "WORK LAMPS ON" : "WORK LAMPS OFF");
       break;
     case "F3": hud.el.fps.classList.toggle("hidden"); e && e.preventDefault(); break;
+    case "Digit1": case "Numpad1": story.choose(1); break;
+    case "Digit2": case "Numpad2": story.choose(2); break;
   }
 }
 renderer.domElement.addEventListener("click", () => {
@@ -122,7 +126,7 @@ function toggleMap() {
   if (S.mode === "sim") {
     S.mode = "map";
     hud.el.map.classList.remove("hidden");
-    hud.drawFullMap(rover, missions, S.trail);
+    hud.drawFullMap(rover, missions, S.trail, pois.markers(story));
     audio.uiTick();
   } else if (S.mode === "map") {
     S.mode = "sim";
@@ -135,6 +139,7 @@ function pauseGame(on) {
     S.mode = "paused";
     hud.el.pause.classList.remove("hidden");
     hud.restoreLog(missions);
+    hud.refreshInventory(story, pois);
     audio.uiBack();
   } else {
     S.mode = "sim";
@@ -158,7 +163,8 @@ const events = {
     missions.advance((t) => hud.pushLog(missions, t));
     audio.radio();
     if (missions.complete && wasLast) {
-      showEndScreen();
+      story.ending(ctxNow());
+      S.endPending = true;
     } else {
       hud.notify(`MISSION ${missions.defs[missions.idx - 1] ? missions.defs[missions.idx - 1].id : ""} COMPLETE`, "task");
     }
@@ -195,6 +201,8 @@ function saveGame() {
       settings: { q: S.quality, vol: audio.volume, mvol: music.volume, beam: missions.beamOn },
       play: S.playSeconds,
       wpt: missions.customWaypoint,
+      story: story.saveData(),
+      pois: pois.saveData(),
     });
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch { /* storage full/unavailable — ignore */ }
@@ -253,11 +261,17 @@ async function boot() {
     dust = new Dust(scene, terrain);
     missions = new Missions(terrain, scene);
     instruments = new Instruments(rover, missions, dust, audio);
+    story = new Story(hud, missions);
+    pois = new POIs(scene, terrain, story, missions);
+    pois.hud = hud;
+    instruments.pois = pois;
+    instruments.story = story;
     rig = new CameraRig(camera, rover, terrain, renderer.domElement);
     post = new Post(renderer, scene, camera);
     hud.bootProgress(0.88, "BAKING SURVEY MAP…");
     await nextFrame();
     hud.bakeMap(terrain);
+    pois.build(renderer);
     hud.mapClickCb = (x, z) => {
       if (missions.customWaypoint && Math.hypot(missions.customWaypoint.x - x, missions.customWaypoint.z - z) < 40) {
         missions.customWaypoint = null;
@@ -266,7 +280,7 @@ async function boot() {
         missions.customWaypoint = { x: clamp(x, -1000, 1000), z: clamp(z, -1000, 1000) };
         hud.notify(`WAYPOINT SET ${x.toFixed(0)}E ${z.toFixed(0)}N`);
       }
-      hud.drawFullMap(rover, missions, S.trail);
+      hud.drawFullMap(rover, missions, S.trail, pois.markers(story));
     };
     applyQuality(2);
     onResize();
@@ -279,7 +293,7 @@ async function boot() {
     }
     hud.bootReady(!!loadSave());
     wireTitle();
-    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE, audio, music, post };
+    window.__RG = { scene, terrain, rover, sky, dust, missions, rocks, renderer, rig, S, THREE, audio, music, post, story, pois };
     requestAnimationFrame(loop);
   } catch (err) {
     hud.el.bootMsg.textContent = `BOOT FAULT: ${err.message}`;
@@ -340,15 +354,28 @@ function startSim(save) {
     }
     S.playSeconds = save.play || 0;
     if (save.wpt) missions.customWaypoint = save.wpt;
+    story.restore(save.story);
+    pois.restore(save.pois, story);
+    S.newGame = false;
     hud.restoreLog(missions);
     hud.notify(`RESUMED — SOL ${sky.sol}`, "task");
   } else {
     hud.pushLog(missions, "OPS: Touchdown confirmed. REGOLITH-1 is on Mars.");
     hud.pushLog(missions, `OPS/M1 BRIEF: ${missions.defs[0].brief}`);
     hud.notify("TOUCHDOWN CONFIRMED — SOL 1", "task");
+    S.newGame = true;
   }
   hud.hideTitle();
   S.mode = "sim";
+}
+
+// story/event context — everything a beat predicate may need
+function ctxNow() {
+  return {
+    rover, sky, missions, terrain, layout: terrain.layout, pois, audio, music, rig, hud, camera,
+    elapsed: S.playSeconds, newGame: !!S.newGame,
+    dist: (p) => Math.hypot(p.x - rover.pos.x, p.z - rover.pos.z),
+  };
 }
 
 // ---- loop
@@ -377,7 +404,7 @@ function loop(now) {
   if (S.mode === "paused" || S.mode === "end" || S.mode === "map") {
     // frozen frame behind overlays; keep map fresh-ish
     if (S.mode === "map" && Math.floor(now / 400) !== Math.floor((now - dt * 1000) / 400)) {
-      hud.drawFullMap(rover, missions, S.trail);
+      hud.drawFullMap(rover, missions, S.trail, pois.markers(story));
     }
     return;
   }
@@ -408,7 +435,14 @@ function loop(now) {
 
   rover.step(dt, dtSim, input, env);
   instruments.update(dt, events);
-  missions.update(dt, rover, events);
+  missions.update(dt, rover, events, story);
+  const ctx = ctxNow();
+  story.update(dt, ctx);
+  pois.update(dt, rover, story);
+  if (S.endPending && !story.speaking && !story.queue.length && !story.pendingChoice) {
+    S.endPending = false;
+    showEndScreen();
+  }
   dust.update(dt, env, rover, camera);
   rig.update(dt);
   terrain.update(rover.pos, renderer, sky.storm.intensity > 0.5 ? 0.0045 : 0);
@@ -433,7 +467,7 @@ function loop(now) {
   renderer.toneMappingExposure = 1.12 + sky.nightF * 0.34;
 
   hud.update(dt, {
-    rover, sky, missions, instruments,
+    rover, sky, missions, instruments, story, pois, markers: pois.markers(story),
     camMode: rig.mode, warp: S.warp, fps: S.fps, mastFov: rig.mastFov,
   });
 
@@ -457,6 +491,11 @@ function loop(now) {
     }
     const shot = instruments.capturePhoto(renderer, rig.mode, { sol: sky.sol, lmst: sky.lmst(), events }, devilInfo);
     hud.addGalleryThumb(shot);
+    if (rig.mode === "MASTCAM" && sky.forceTransit) {
+      const cd = camera.getWorldDirection(new THREE.Vector3());
+      if (cd.dot(sky.sunDir) > Math.cos(7 * Math.PI / 180)) { story.setFlag("transit"); hud.notify("PHOBOS TRANSIT CAPTURED", "task"); }
+    }
+    if (terrain.onPlateau(rover.pos.x, rover.pos.z)) story.setFlag("plateau_photo");
   }
 
   // autosave
@@ -487,7 +526,7 @@ function ambientAlerts(env) {
   }
   if (rover.hitBoundary && !S.boundWarn) {
     S.boundWarn = true;
-    hud.notify("RIM WALL — the survey zone is the crater floor", "warn");
+    hud.notify("NO-GO TERRAIN — wall, pit or map edge", "warn");
     setTimeout(() => { S.boundWarn = false; }, 6000);
   }
 }

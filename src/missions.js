@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { clamp } from "./noise.js";
 import { MATS } from "./rover.js";
 
-export const SAVE_KEY = "regolith-save-v3";
+export const SAVE_KEY = "regolith-save-v4";
 
 export function resolveSites(terrain) {
   const L = terrain.layout;
@@ -39,7 +39,7 @@ export function resolveSites(terrain) {
       if (h > rs.h && terrain.slopeAt(x, z) < 0.2) rs = { x, z, h };
     }
   }
-  return { lander: L.lander, rim, dune: dc, delta, ridge: rs };
+  return { lander: L.lander, rim, dune: dc, delta, ridge: rs, argo: L.argoSite };
 }
 
 export function missionDefs(sites) {
@@ -102,15 +102,23 @@ export function missionDefs(sites) {
       done: "Relay deployed and locked, line-of-sight to the whole quad. From up here you can see the delta, the dunes, and your own tracks. Downhill from here.",
     },
     {
-      id: "M6", title: "EPHEMERAL", site: null, radius: 0,
+      id: "M6", title: "THE INLET", site: sites.argo, radius: 40,
+      tasks: [
+        { id: "reach", label: "Climb the inlet canyon to the plateau — ARGO-1's landing site" },
+      ],
+      brief: "The river's road up through the western wall. Nobody has driven it since ARGO-1 drove down. Her landing platform is up there somewhere.",
+      done: "You are on the plateau where the other rover began. Everything below you was her survey area once.",
+    },
+    {
+      id: "M7", title: "EPHEMERAL", site: null, radius: 0,
       tasks: [
         { id: "devil", label: "Photograph an active dust devil (≤150 m, mastcam)" },
       ],
-      brief: "Convective vortices peak in early afternoon. Catch one on the mast camera.",
+      brief: "Convective vortices peak in early afternoon. Catch one on the mast camera — any time, anywhere.",
       done: "Vortex imaged — core ΔP ~2 Pa, dust flux confirmed. Atmospherics team is delighted.",
     },
     {
-      id: "M7", title: "UPLINK", site: sites.lander, radius: 15,
+      id: "M8", title: "UPLINK", site: sites.lander, radius: 15,
       tasks: [
         { id: "reach", label: "Return to the lander" },
         { id: "uplink", label: "Hold for HGA uplink [E]" },
@@ -223,6 +231,12 @@ export class Missions {
   }
 
   cur() { return this.defs[this.idx]; }
+  taskDoneById(mid, tid) {
+    const i = this.defs.findIndex((m) => m.id === mid);
+    if (i < 0) return false;
+    const j = this.defs[i].tasks.findIndex((t) => t.id === tid);
+    return j >= 0 && !!this.taskState[i][j];
+  }
   curTasks() { return this.taskState[this.idx]; }
 
   taskDone(taskId) {
@@ -260,9 +274,11 @@ export class Missions {
     return Math.hypot(t.x - pos.x, t.z - pos.z);
   }
 
-  update(dt, rover, events) {
+  update(dt, rover, events, story) {
     const m = this.cur();
     if (!m || this.complete) { this.beam.visible = this.beamMark.visible = false; return; }
+    // a devil photographed earlier counts the moment EPHEMERAL activates
+    if (m.id === "M7" && story && story.has("devil_photo") && this.taskDone("devil")) events.task("Dust devil already on file — credited");
     // beam placement
     const t = this.navTarget();
     if (t && this.beamOn) {

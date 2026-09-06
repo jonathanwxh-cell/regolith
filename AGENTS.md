@@ -37,8 +37,11 @@ npm run verify:live    # + prove the deployed bytes match this repo
 | `src/rover.js` | Rover model, rocker-bogie posing, driving physics, power model, arm/mast controllers | Exports `MATS` (shared materials) |
 | `src/cameras.js` | 4 camera modes, pointer lock, terrain-aware framing | `CHASE ORBIT MASTCAM HAZCAM` |
 | `src/dust.js` | Pooled particles, wheel/drill bursts, dust devils, storm streaks | 1400-particle ring buffer |
-| `src/missions.js` | Campaign definitions, site resolution, props (lander/relay/nav beam), save shape | Mission content lives in `missionDefs()` |
-| `src/instruments.js` | Contextual action state machine, photo capture + gallery | Couples to mission task ids |
+| `src/missions.js` | 8-mission spine, site resolution, props (lander/relay/nav beam), save shape | Mission content lives in `missionDefs()` |
+| `src/story.js` | Ops voices, declarative story beats + flags, comms pacing, [1]/[2] choices, sample tubes, world events, composed endings | See **Story & sandbox** |
+| `src/pois.js` | Discoverable places with procedural props + held actions; ARGO-1's baked wheel trail; the impact-crater POI | Content lives in `define()` |
+| `src/instruments.js` | Contextual action state machine (mission actions, then POI actions), photo capture + gallery | Couples to mission task ids and `poi.action` |
+| `tools/suno.mjs` | Music generation via Suno (sunoapi.org); reads the key from `../.secrets/suno.env` | MiniMax music is withdrawn — this is the only path |
 | `src/hud.js` | All DOM (injected from one template string), canvas widgets, map bakes | No HTML in `index.html` beyond `#app` |
 | `src/audio.js` | Procedural WebAudio SFX — wind, motor, terrain rumble, thumps, servo, drill, UI, radio | Must be `init()`d from a user gesture |
 | `src/music.js` | Context-crossfaded music (title/day/night/storm) streaming from `public/audio/` | Own bus under `audio.master`; fails silent if files are missing |
@@ -113,6 +116,49 @@ edge. Fragment-space normals carry all the relief that matters; rocks and the ro
 Adding a task id that nothing completes yields a mission that can never advance, and nothing
 warns you.
 
+## Story & sandbox
+
+The 8-mission spine is deliberately thin; the sandbox is the POIs, the events and the arc.
+
+**Beats** (`makeBeats()` in `story.js`) are `{id, when(ctx, story), run(ctx, story)}`; each fires
+once, evaluated every 0.5 s of sim. `ctx` is built by `ctxNow()` in `main.js` — `rover, sky,
+missions, terrain, layout, pois, audio, music, rig, hud, camera, elapsed (real play seconds),
+newGame, dist(p)`. Add a state field there before reading it in a predicate. Lines go through
+`story.say(who, text)` / `saySeq` and are paced by `Story.update` (typewriter length + 1.4 s +
+0.7 s gap), so a burst of `say` calls plays as a conversation, not a wall. `offerChoice(prompt,
+a, b, onA, onB)` queues a [1]/[2] prompt that blocks further lines until answered (keys handled
+in `main.js`). **Flags** (`setFlag`/`has`) are the only cross-system memory and are saved.
+
+**POIs** (`define()` in `pois.js`): `{id, title, x, z, r, kind, hintFlag?, prop?, onDiscover?,
+action?}`. Discovery = rover inside `r`. `hintFlag` makes an undiscovered POI appear on the map
+(purple `?`) once that story flag is set — that is how the debris trail is revealed after M2.
+`action` = `{label, dur, pose, available?(story), onDone(story, ctx)}` and plugs into the same
+hold-E machine as mission actions via `Instruments.contextAction` (mission actions win when both
+apply). `ctx.science(sci)` from `onDone` shows the spectrometer panel AND offers a sample tube.
+
+**Sample tubes**: `MAX_TUBES` = 10; every science result offers SEAL/LEAVE; sealed tubes are
+listed at the ending and in the pause menu. ARGO's cache adds three without a prompt.
+
+**World events** (`WorldEvents` in `story.js`), all progress-gated so a fast player still sees
+them: impact after M2 on the first night (`terrain.punchCrater` + a POI + waypoint + map
+rebake), Phobos transit at 14:20 on any sol ≥ 2 (`sky.forceTransit` scripts the moon across the
+sun; a mastcam photo within 7° during the window sets `transit`), solar conjunction after M6
+starts (one sol of `commsBlackout`: ops lines are dropped, ARGO logs still play), global dust
+storm 60 s after its warning beat (M5+, 15 min in). Each records `done` in the save.
+
+**ARGO-1 arc**: `argo_hint` (M2) → debris POIs reveal → `argo_known` → the baked trail beat
+(`tracks_seen`, rover within 40 m of the polyline) → the wreck POI's choice → `argo_core_offered`
+→ hold-E retrieval (`argo_core`, −144 Wh) → `ARGO_LOGS` unlock (first after 8 s, then every
+200 s of play; `music.cue("ghost", 45)` each time) → `argo_logs_done`. The ending composes
+paragraphs from `organics / shore_carbonates / ice / meteorite / argo_core|argo_known` and the
+tube list, then the end overlay appears only after the last line has played (`S.endPending`).
+
+**Testing the story without waiting for real time**: from the console,
+`__RG.story.update(0.1, ctx)` / `__RG.pois.update(0.1, __RG.rover, __RG.story)` in a loop with a
+hand-built `ctx` fast-forwards pacing and beats deterministically; `__RG.story.events.update`
+likewise. This is how every event above was verified — an occluded automation window throttles
+`requestAnimationFrame` to ~1 Hz, so waiting for real seconds does not work there.
+
 ## Traps
 
 Things that cost me time and will cost the next agent the same.
@@ -154,22 +200,40 @@ view.
 **Change the world** → all terrain shaping is in `Terrain.generate()`. It is
 **multi-resolution**: low-frequency bands (warp, regional relief, rolling plains, the rim's
 ridged texture) are evaluated on 256²/512² grids and bilinearly upsampled, and only
-high-frequency content runs per-texel at 2048² — that is why a 4 km world at 2 m/texel boots
-in ~25 s instead of minutes. Features are analytic on top: rim wall (radial, with a softened
-corridor and bench for M5) → feeder channel → delta fan with quantized strata benches →
-Kodiak butte → playa → Séítah dunes → ~120 craters. `generate()` also writes the **material
-mask texture** (R delta strata, G playa, B sand, A rim) that the terrain shader, the physics
+high-frequency content runs per-texel at 2048² — that is why a 6 km world at 3 m/texel still
+boots in well under a minute. Features are analytic on top, **in this order, and the order
+matters** (later features overwrite earlier ones): rim wall (radial around the crater centre
+`CX, CZ` = (900, 0) — the crater sits east of world centre so the plateau fits west of it —
+with a softened corridor and bench for M5, and the outer flank descending onto the plateau at
+`valley.plateauH` = 140 m) → plateau relief for `wx < −1200` (mesas with quantized benches,
+the shoreline basin with three terraces, the skylight pit) → delta fan with quantized strata
+benches → Kodiak butte → **inlet canyon**: a *set-to-ramp* causeway graded from
+`plateauH + 6` at `valley.b` to `delta.topH + 1` at `valley.a` (the delta apex), applied
+*after* the delta so the fan cannot wall off the apex — the first version only ever lowered
+terrain and left a 37° step where the rim rose through it and a 31 m cliff at the apex →
+distributary channel (a min-cut from the apex 960 m down-fan at bearing −0.3 rad, so the
+causeway continues as an incised channel to the fan front) → playa → Séítah dunes → ~190
+craters. `generate()` also writes the **material mask texture** (R strata + mesa benches,
+G playa + shoreline terraces, B sand, A rim) that the terrain shader, the physics
 (`inDuneBand`/`inBasin`/`onDelta` = mask lookups) and the rock scatter all read — if you add
 a surface unit, add a channel or reuse one. `makeLayout(seed)` places the named features;
 `resolveSites` derives mission points from them (the delta drill site literally walks a ray
 until it falls off the strata mask). Changing the seed moves everything — re-verify M5's
-bench is drivable and the M4 ray still finds a scarp.
+bench is drivable, the M4 ray still finds a scarp, and the canyon profile is still monotonic
+(probe `heightAt`/`slopeAt` along `layout.valley` for t = 0…1 and along the channel from the
+apex: expect a steady descent, ≤ ~25° everywhere, no steps).
 
-**The world edge is the crater rim.** Playable radius `PLAY_R` (1960 m) with a radial clamp in
-`rover.js`; the in-field wall rises from r≈1880 so it reads as a distant rampart rather than a
-pit (first attempt started it at 1650 and the floor felt like standing in a hole); two
-silhouette rings at 4.6/7.2 km continue the rim beyond the heightfield. Jezero's real walls
-rise 800–1200 m — ours are compressed for a 4 km stage.
+**The playable world is three zones, not a radius.** `Terrain.isPlayable(x, z)` =
+`inCrater` (r < `PLAY_R` 1960 m around `CX, CZ`) ‖ `inValley` (two capsule segments — the
+causeway and the distributary channel) ‖ `onPlateau` (x ∈ (−2950, −1450), |z| < 2900), minus
+the skylight pit and anything beyond ±3000 m. `rover.js` restores `_lastValid` on a violation
+and the HUD says "NO-GO TERRAIN"; `rocks.js`, `dust.js` (devil spawns) and the POIs all gate
+on the same predicate, so extend the world by extending `isPlayable`, never by loosening the
+clamp. The in-field wall rises from crater-r ≈ 1880 so it reads as a distant rampart rather
+than a pit (first attempt started it at 1650 and the floor felt like standing in a hole);
+`makeRimRing` silhouette rings continue the rim beyond the heightfield, with a gap at the
+west (angle π) where the canyon breaches it. Jezero's real walls rise 800–1200 m — ours crest
+at ~240–500 m, compressed for the stage.
 
 **Tune the look** → terrain albedo in the `map_fragment` replacement in `terrain.js`; sky
 gradients in the dome fragment shader in `sky.js`; grade/bloom in `post.js`. Lighting intensities
@@ -177,10 +241,16 @@ are in `Sky.update`.
 
 ## Music
 
-Four ambient beds in `public/audio/`, generated with MiniMax music-2.6 via the
-`hetzner-deploy` MCP `generate_music` tool (`instrumental: true`, poll `check_media_job`,
-download the MinIO URL into `public/audio/`). They are content, not code — regenerate freely,
-keep the filenames:
+Five ambient beds in `public/audio/`. The first four were generated with MiniMax music-2.6
+(2026-08-13); **MiniMax's music API has since been withdrawn (HTTP 410, 2026-09-06)** — do not
+retry it. Regenerate any track with Suno instead:
+
+```
+node tools/suno.mjs "<style / mood prompt>" public/audio/<name>.mp3
+```
+
+(~2 min; reads `SUNO_API_KEY` from the workspace `.secrets/suno.env`, which is outside this
+repo — never commit a key.) They are content, not code — regenerate freely, keep the filenames:
 
 | File | Context | Prompt gist |
 |---|---|---|
@@ -188,6 +258,7 @@ keep the filenames:
 | `drift.mp3` | day | warm sparse analog pads, granular sand shimmer, meditative, no percussion |
 | `nocturne.mp3` | night (`nightF > 0.55`) | cold sub-drone, icy distant shimmer, extremely minimal |
 | `haze.mp3` | storm (`intensity > 0.45`) | low rumbling pressure drone, sits *under* the wind SFX |
+| `ghost.mp3` | ARGO-1 log moments (`music.cue("ghost", 45)`) | degraded lonely piano fragment, tape hiss, radio static, sub hum (Suno V5) |
 
 `src/music.js` streams them through `MediaElementAudioSourceNode` into its own gain bus under
 `audio.master`, crossfading ~4.5 s with 3 s hysteresis so dawn/dusk/storm edges don't flap.

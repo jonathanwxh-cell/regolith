@@ -12,10 +12,11 @@ const TRACKS = {
   day: "audio/drift.mp3",      // warm sparse daylight ambient
   night: "audio/nocturne.mp3", // cold sub-drone night ambient
   storm: "audio/haze.mp3",     // tense rumble under the wind SFX
+  ghost: "audio/ghost.mp3",    // degraded, lonely — ARGO-1's recovered logs
 };
 const FADE = 4.5;              // crossfade seconds
 const HOLD = 3.0;              // context must be stable this long before switching
-const LEVEL = { title: 0.5, day: 0.34, night: 0.3, storm: 0.26 };
+const LEVEL = { title: 0.5, day: 0.34, night: 0.3, storm: 0.26, ghost: 0.42 };
 
 export class MusicSys {
   constructor(audio) {
@@ -26,6 +27,16 @@ export class MusicSys {
     this.pending = null;
     this.pendingT = 0;
     this.started = false;
+    this.cueName = null;
+    this.cueUntil = 0;
+    this.clock = 0;
+  }
+
+  // temporarily override the context (story moments); falls back after `seconds`
+  cue(name, seconds) {
+    if (!TRACKS[name]) return;
+    this.cueName = name;
+    this.cueUntil = this.clock + seconds;
   }
 
   start() {
@@ -66,7 +77,12 @@ export class MusicSys {
 
   // desired context, evaluated by the caller each frame
   update(dt, desired) {
+    this.clock += dt;
     if (!this.started) return;
+    if (this.cueName) {
+      if (this.clock < this.cueUntil && !(this.tracks[this.cueName] && this.tracks[this.cueName].failed)) desired = this.cueName;
+      else this.cueName = null;
+    }
     // hysteresis so dawn/dusk and storm edges don't flap the crossfade
     if (desired !== this.current) {
       this.pendingT = desired === this.pending ? this.pendingT + dt : 0;

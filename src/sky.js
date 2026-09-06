@@ -244,6 +244,22 @@ export class Sky {
     const moonVis = clamp(this.nightF + this.duskF * 0.4, 0, 1) * (1 - storm);
     this.phobos.material.opacity = moonVis * 0.9;
     this.deimos.material.opacity = moonVis * 0.6;
+    // scripted Phobos transit: a dark disc crossing the sun over ~40 s
+    if (this.forceTransit) {
+      this._transitT = (this._transitT || 0) + dtReal;
+      const k = clamp(this._transitT / 40, 0, 1);
+      const side = new THREE.Vector3().crossVectors(sd, new THREE.Vector3(0, 1, 0)).normalize();
+      const p = sd.clone().addScaledVector(side, (k - 0.5) * 0.028).normalize();
+      this.phobos.position.copy(p).multiplyScalar(5200);
+      this.phobos.visible = true;
+      this.phobos.material.opacity = 1;
+      this.phobos.material.color.setHex(0x120c09);
+      this.phobos.scale.setScalar(44);
+    } else if (this._transitT) {
+      this._transitT = 0;
+      this.phobos.material.color.setHex(0x9a938c);
+      this.phobos.scale.setScalar(26);
+    }
 
     // sun light
     const sunI = (0.2 + 3.4 * Math.pow(Math.max(0, Math.sin(el)), 0.6)) * (el > 0 ? 1 : 0);

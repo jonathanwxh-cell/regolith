@@ -5,15 +5,17 @@ What this is and why it's built this way. For *how to work on it*, see
 
 ## Premise
 
-You operate a Perseverance-class rover on the floor of a large impact crater — a 4 km
-quad modeled on Jezero, Perseverance's real site, with its signature landmarks: the
-west-wall river delta with terraced strata, a feeder channel through the rim, a remnant
-butte, a Séítah-style dune maze, a playa, and the crater's own rim as the horizon. Seven
-objectives — checkout, crater-rim spectrometry, dune-outcrop sampling, coring the delta
-front, a relay deploy on a rim bench, atmospheric photography, and a final uplink.
-Open-world driving between them, a real sol clock with day/night, weather, and an RTG +
-battery model that makes night operations and steep grades an actual decision rather than
-a texture. Grounded numbers and sources are listed in AGENTS.md "References".
+You operate a Perseverance-class rover in a 6 km sandbox: a crater modeled on Jezero,
+Perseverance's real site, with its signature landmarks — the west-wall river delta with
+terraced strata, a remnant butte, a Séítah-style dune maze, a playa — plus the inlet
+canyon that breaches the western rim and the plateau it climbs to, with mesas, the
+shoreline of a second lake, and a lava-tube skylight. Eight objectives — checkout,
+crater-rim spectrometry, dune-outcrop sampling, coring the delta front, a relay deploy on
+a rim bench, the climb up the inlet, atmospheric photography, and a final uplink — and a
+story that surfaces from the terrain between them (see "Story design"). Open-world driving
+throughout, a real sol clock with day/night, weather, and an RTG + battery model that makes
+night operations and steep grades an actual decision rather than a texture. Grounded numbers
+and sources are listed in AGENTS.md "References".
 
 ## What "hyper-real" means here
 
@@ -47,10 +49,11 @@ behaves like the real thing at the level a rover operator would notice**:
 
 **Procedural everything** (with one deliberate exception). No asset pipeline, no CDN, and
 the whole thing is a static directory the box serves as flat files; the world is
-reproducible from a seed, so a bug is always re-creatable. The exception is music: four
-MiniMax-generated ambient beds, chosen over procedural music because a generative score
-good enough to disappear into the background is a project of its own. They stream lazily,
-crossfade by context (title / day / night / storm), and the game runs fine without them.
+reproducible from a seed, so a bug is always re-creatable. The exception is music: five
+generated ambient beds (four MiniMax, one Suno), chosen over procedural music because a
+generative score good enough to disappear into the background is a project of its own. They
+stream lazily, crossfade by context (title / day / night / storm, plus a story-cued ghost
+theme), and the game runs fine without them.
 
 **Two-tier terrain instead of a quadtree LOD.** A single high-resolution tile snapped to a
 grid under the rover, over one coarse full-world mesh, gets ~95% of the visual benefit of a
@@ -67,6 +70,24 @@ correctly but is not a constraint solver, and can be stiff on sharp convex crest
 height function gives relief that a vertex normal at 0.75 m spacing cannot, and sidesteps
 the shadow acne and frustum seams that displaced depth passes produce.
 
+## Story design
+
+The narrative is a **found-object mystery** that pays off in the science, not a scripted
+cutscene track. A prior rover, ARGO-1 (solar-powered, killed by a global dust storm — the
+Opportunity story, transposed), is discovered through physical evidence in the order a real
+survey would find it: entry debris near the fresh crater, wind-softened wheel tracks baked
+into the same track map your own wheels write to, then the wreck itself. The emotional core
+is its recovered logs — its ops team's uplinks *to* it during the storm — which arrive one at
+a time over the rest of the campaign so they color everything you do afterward. Three ops
+voices give the survey a crew without ever showing a face; each has one thing they care
+about (procedure, rocks, the battery) so their reactions write themselves from game state.
+
+Choices are few and consequential rather than many and cosmetic: retrieve the core or leave
+her; which ten samples go home; whether to spend a sol's battery on a discovery instead of
+the mission. World events are progress-gated so a fast player and a slow one both meet them,
+and each one changes the terrain, the sky, or the comms rather than just posting text. The
+ending is composed from flags so it reads back the player's own campaign.
+
 ## Non-goals
 
 Multiplayer. Real orbital mechanics. Soft-body or deformable terrain (tracks are a texture,
@@ -76,6 +97,10 @@ Photorealistic asset fidelity; the realism budget goes to behavior and light.
 ## Known limitations
 
 - The rocker-bogie is posed, not simulated (above). Sharp crests can look stiff.
-- One biome set. There is no polar, canyon, or lava-tube terrain.
+- Two biomes (crater floor, plateau). No polar terrain; the lava-tube skylight is a pit you
+  photograph from the lip, not a cave you enter.
 - Dust devils are billboard columns with scrolling noise, not fluid simulation.
-- The far mesh is 512² for the whole 2 km, so distant relief is coarser than the near tile.
+- The far mesh is a 6×6 grid of 128² tiles over the whole 6 km, so distant relief is coarser
+  than the near tile.
+- The story is linear in its reveals; choices change the ending's composition and a few
+  resources, not the geography.

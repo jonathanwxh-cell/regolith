@@ -62,7 +62,7 @@ check("no external asset references", async () => {
 // silent without them (by design), which means a checkout that lost
 // public/audio/ ships a silent build with no error anywhere.
 check("music tracks present", async () => {
-  const tracks = ["beacon", "drift", "nocturne", "haze"];
+  const tracks = ["beacon", "drift", "nocturne", "haze", "ghost"];
   const sizes = [];
   for (const name of tracks) {
     const buf = await readFile(p(`public/audio/${name}.mp3`)).catch(() => null);
