@@ -16,6 +16,10 @@ import { Story } from "./story.js";
 import { POIs } from "./pois.js";
 import { clamp } from "./noise.js";
 
+// Outer bound of playable ground (see Terrain.isPlayable). Map waypoints clamp
+// to this; it is NOT the old 2 km world half-width.
+const PLAY_HALF = 3000;
+
 const app = document.getElementById("app");
 const hud = new HUD(document.body);
 
@@ -100,7 +104,8 @@ function onKey(code, e) {
     case "KeyG": if (rig.mode === "MASTCAM") S.captureFlag = true; break;
     case "KeyE": {
       const ca = instruments.contextAction();
-      if (ca && ca.type !== "blocked") instruments.start(ca.type);
+      // ca.poi is REQUIRED for type "poi" — start() reads poi.action.
+      if (ca && ca.type !== "blocked") instruments.start(ca.type, ca.poi);
       else if (ca) audio.uiBack();
       break;
     }
@@ -151,13 +156,18 @@ function pauseGame(on) {
 // ---- events hub
 const events = {
   notify: (t, k) => hud.notify(t, k || "info"),
-  task: (t) => { hud.notify(t, "task"); saveGame(); },
+  // Crediting a task must also test for mission completion. Tasks credited
+  // here (M6 "reach", M1 "drive", M7's pre-credited "devil") have no other
+  // path to checkAdvance, and a task that completes without advancing
+  // dead-ends the campaign — checkAdvance is a no-op unless all tasks are done.
+  task: (t) => { hud.notify(t, "task"); saveGame(); events.checkAdvance(); },
   science: (sci) => {
     hud.showScience(sci);
     hud.pushLog(missions, `SCI · ${sci.name} — ${sci.flavor}`);
   },
   shake: (a) => rig.addShake(a),
   checkAdvance: () => {
+    if (missions.complete) return;          // never re-run the finale
     if (!missions.allTasksDone()) return;
     const wasLast = missions.idx === missions.defs.length - 1;
     missions.advance((t) => hud.pushLog(missions, t));
@@ -277,8 +287,11 @@ async function boot() {
         missions.customWaypoint = null;
         hud.notify("WAYPOINT CLEARED");
       } else {
-        missions.customWaypoint = { x: clamp(x, -1000, 1000), z: clamp(z, -1000, 1000) };
-        hud.notify(`WAYPOINT SET ${x.toFixed(0)}E ${z.toFixed(0)}N`);
+        // Clamp to the playable envelope, not the old 2 km world: anything
+        // tighter silently drops waypoints hundreds of metres from the click.
+        const wx = clamp(x, -PLAY_HALF, PLAY_HALF), wz = clamp(z, -PLAY_HALF, PLAY_HALF);
+        missions.customWaypoint = { x: wx, z: wz };
+        hud.notify(`WAYPOINT SET ${wx.toFixed(0)}E ${wz.toFixed(0)}N`);
       }
       hud.drawFullMap(rover, missions, S.trail, pois.markers(story));
     };

@@ -18,14 +18,18 @@ export class Instruments {
   // What can E do right now? -> {type, label} | null
   contextAction() {
     if (this.action) return null;
-    const m = this.missions.cur();
-    if (!m || this.missions.complete) return null;
     const r = this.rover;
     if (Math.abs(r.v) > 0.25) return null;
+    const pa = this.pois && this.pois.contextAction(r, this.story);
+    // POI ops cost charge like any other arm op, so they honour limp mode too.
+    if (pa && r.limp) return { type: "blocked", label: "BATTERY TOO LOW" };
+    const m = this.missions.cur();
+    // After the finale the campaign is over but the quad is still yours —
+    // keep discoveries actionable in free roam.
+    if (!m || this.missions.complete) return pa || null;
     const tasks = m.tasks;
     const stt = this.missions.curTasks();
     const near = m.site ? Math.hypot(m.site.x - r.pos.x, m.site.z - r.pos.z) < m.radius : false;
-    const pa = this.pois && this.pois.contextAction(r, this.story);
     for (let i = 0; i < tasks.length; i++) {
       if (stt[i]) continue;
       const t = tasks[i];

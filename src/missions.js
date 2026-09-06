@@ -261,8 +261,12 @@ export class Missions {
     }
   }
 
-  // active nav target (mission site or custom waypoint)
+  // Active nav target. A waypoint the player set (or one the impact beat put on
+  // the map) is what they are actually steering to, so it wins over the mission
+  // site — otherwise the beam and the range readout contradict the map.
   navTarget() {
+    const w = this.customWaypoint;
+    if (w) return { x: w.x, z: w.z, label: "WPT" };
     const m = this.cur();
     if (m && m.site) return { x: m.site.x, z: m.site.z, label: m.id };
     return null;

@@ -164,19 +164,23 @@ export class Terrain {
       const cx = wx - CX, cz = wz - CZ;
       const r = Math.hypot(cx, cz);
       const rg = grid(ridgedF, BN, qx, qz);
+      const aDiff = Math.abs(angDelta(Math.atan2(cz, cx), ovAng));
+      const corridor = smoothstep(0.22, 0.05, aDiff);
       if (r > 1550) {
         const inner = Math.pow(smoothstep(1880, 2320, r), 2);
         const outer = smoothstep(2320, 2850, r);
-        const aDiff = Math.abs(angDelta(Math.atan2(cz, cx), ovAng));
-        const corridor = smoothstep(0.22, 0.05, aDiff);
         const crest = (240 + 260 * rg) * (1 - corridor * 0.45);
         h += inner * crest * (1 - outer) + outer * (V.plateauH + 22 * rg);
         h += smoothstep(1550, 1980, r) * (8 + 10 * rg) * (1 - outer); // talus apron
         rMask = Math.max(rMask, smoothstep(1700, 1960, r) * (1 - outer));
-        if (corridor > 0.02) {
-          const bench = corridor * smoothstep(1310, 1585, r) * smoothstep(1850, 1700, r);
-          h = lerp(h, 92 + 4 * rg, bench * 0.9);
-        }
+      }
+      // The M5 overlook bench ramps up from the OPEN CRATER FLOOR, so it must
+      // live outside the rim guard above. Nested inside `r > 1550` its 1310→1585
+      // ramp-in was clipped at 0.96, standing an 80 m wall with 88° faces on
+      // playable floor at r≈1550. Its own band gives the intended ~18° ramp.
+      if (r > 1280 && r < 1900 && corridor > 0.02) {
+        const bench = corridor * smoothstep(1310, 1585, r) * smoothstep(1850, 1700, r);
+        h = lerp(h, 92 + 4 * rg, bench * 0.9);
       }
 
       // -- plateau relief (west of the rim): rougher basalt plain, mesas,
@@ -317,7 +321,8 @@ export class Terrain {
       out.h = h; out.strata = dMask; out.playa = pMask; out.sand = sMask; out.rim = rMask;
       return out;
     };
-    this._buildBase = buildBase;
+    // (No `this._buildBase = buildBase` here: nothing reads it, and the closure
+    //  pinned ~2.9 MB of generation scratch for the life of the page.)
 
     // ---- pass C (2048², 3 m): assemble heights + the material mask
     const M = this.mask;
@@ -428,6 +433,7 @@ export class Terrain {
       }
       p.needsUpdate = true;
       tile.geometry.computeVertexNormals();
+      tile.geometry.computeBoundingSphere();  // vertices moved; stale sphere mis-culls
     }
   }
 
@@ -514,7 +520,11 @@ export class Terrain {
     renderer.setRenderTarget(null);
     this._stampPool = [];
     for (let i = 0; i < 64; i++) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.stampMat);
+      // Each stamp needs its OWN material: opacity is read at draw time, so a
+      // shared one rendered the whole batch at the last stamp's strength and
+      // made splatTrack's `strength` argument a no-op (ARGO's faint 0.22 trail,
+      // the sand/rock track distinction, the lander scorch all collapsed).
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.stampMat.clone());
       m.rotation.x = -Math.PI / 2;
       m.visible = false;
       this.trackScene.add(m);
@@ -664,14 +674,17 @@ export class Terrain {
           #else
             float nE = 3.2;
           #endif
+          // Discard FIRST: the four totalH() calls below are 48 dependent
+          // texture fetches, and every fragment under the near tile threw them
+          // away. vWPos is all the test needs.
+          #ifndef NEAR_TILE
+            if (distance(vWPos.xz, uRover.xz) < 176.0) discard;
+          #endif
           float hx0 = totalH(vWPos.xz - vec2(nE, 0.0));
           float hx1 = totalH(vWPos.xz + vec2(nE, 0.0));
           float hz0 = totalH(vWPos.xz - vec2(0.0, nE));
           float hz1 = totalH(vWPos.xz + vec2(0.0, nE));
           vec3 worldN = normalize(vec3(hx0 - hx1, 2.0 * nE, hz0 - hz1));
-          #ifndef NEAR_TILE
-            if (distance(vWPos.xz, uRover.xz) < 176.0) discard;
-          #endif
           {
             vec2 wxz = vWPos.xz;
             vec2 muv = wxz / WORLD_M + 0.5;
@@ -747,7 +760,7 @@ export class Terrain {
       m.position.set(s.x, 0, s.z);
       m.rotation.z = -s.heading;
       m.scale.set(s.width, s.len, 1);
-      this.stampMat.opacity = s.strength;
+      m.material.opacity = s.strength;
     }
     this.fadeQuad.visible = stormFade > 0;
     if (stormFade > 0) this.fadeQuad.material.opacity = stormFade;
@@ -781,7 +794,9 @@ function angDelta(a, b) {
 }
 export function distToSeg(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
-  const t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz), 0, 1);
+  const len2 = dx * dx + dz * dz;
+  if (len2 < 1e-9) return Math.hypot(px - ax, pz - az);  // degenerate: 0/0 -> NaN
+  const t = clamp(((px - ax) * dx + (pz - az) * dz) / len2, 0, 1);
   return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
 }
 

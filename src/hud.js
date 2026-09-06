@@ -400,7 +400,12 @@ export class HUD {
     line.className = "commsLine";
     line.innerHTML = `<span class="who" style="color:${char.color};border-color:${char.color}66">${char.name}</span><span class="txt"></span>`;
     body.appendChild(line);
-    while (body.children.length > 5) body.firstChild.remove();
+    // Stop the evicted line's typewriter, or it keeps ticking against a
+    // detached node for the rest of its string.
+    while (body.children.length > 5) {
+      if (body.firstChild._t) clearTimeout(body.firstChild._t);
+      body.firstChild.remove();
+    }
     const txt = line.querySelector(".txt");
     let i = 0;
     const step = () => {

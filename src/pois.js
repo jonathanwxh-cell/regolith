@@ -73,9 +73,14 @@ export class POIs {
         },
         action: {
           label: "HOLD E — RETRIEVE MEMORY CORE", dur: 24, pose: "reach",
-          available: (s) => s.has("argo_core_offered") || s.has("argo_left"),
+          // Gate on discovery, not on the choice: a pending choice is not
+          // persisted, so saving with the RETRIEVE/LEAVE prompt on screen used
+          // to lock the core away forever (the POI never re-announces).
+          available: (s) => s.has("argo_known") || s.has("argo_core_offered") || s.has("argo_left"),
           onDone: (s, ctx) => {
-            ctx.rover.battery = Math.max(60, ctx.rover.battery - 144);
+            // Must be able to actually cost the rover its charge — clamping at
+            // the limp threshold turned a 12% cost into a refund below 204 Wh.
+            ctx.rover.battery = Math.max(0, ctx.rover.battery - 144);
             s.setFlag("argo_core");
             s.saySeq([
               ["SYS", "Core's out. Connector's… it's clean. It's clean, Voss."],
@@ -274,7 +279,8 @@ export class POIs {
       },
     };
     this.list.push(poi);
-    this.missions.customWaypoint = { x, z };
+    // NB: the waypoint is set by the caller (WorldEvents), not here — this runs
+    // again on restore, and must not stomp the waypoint the player had set.
   }
 
   setTransitWindow(on) { this.transitWindow = on; }
@@ -332,7 +338,17 @@ export class POIs {
     if (!d) return;
     for (const p of this.list) { p.discovered = d.disc?.includes(p.id) || false; p.done = d.done?.includes(p.id) || false; }
     const ev = story.events.impactSite;
-    if (ev && !this.list.find((p) => p.id === "impact")) { this.spawnImpact(ev.x, ev.z); const ip = this.list.find((p) => p.id === "impact"); ip.discovered = d.disc?.includes("impact") || false; ip.done = d.done?.includes("impact") || false; }
+    if (ev && !this.list.find((p) => p.id === "impact")) {
+      // The heightfield is regenerated from the seed on every boot, so the bowl
+      // punched at impact time is gone. Re-punch it before placing the props,
+      // or the player drives to a "fresh crater" that is flat ground.
+      this.terrain.punchCrater(ev.x, ev.z, 18);
+      if (this.hud) this.hud.rebakeSoon();
+      this.spawnImpact(ev.x, ev.z);
+      const ip = this.list.find((p) => p.id === "impact");
+      ip.discovered = d.disc?.includes("impact") || false;
+      ip.done = d.done?.includes("impact") || false;
+    }
   }
 
   // ---------------------------------------------------------------- props

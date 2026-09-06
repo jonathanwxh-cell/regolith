@@ -14,7 +14,7 @@ Vanilla three.js r185 bundled by esbuild into one IIFE. No framework, no runtime
 dependencies, no external network calls at runtime. Every texture, mesh and sound effect is
 generated in code; the only asset files are the four MiniMax-generated music tracks in
 `public/audio/` (same-origin, streamed — see **Music** below). State persists to
-`localStorage` under `regolith-save-v2`.
+`localStorage` under `regolith-save-v4`.
 
 ## Commands
 
@@ -67,11 +67,13 @@ debugging session (2026-09-05) because which mesh got the wrong program depended
 compile order, so hiding objects one at a time gave contradictory answers. If you add another
 material variant to `makeMaterial`, give it its own key.
 
-**Terrain height is `sampleMain() + sampleDetail()` — always both, everywhere.** This exists
-twice by necessity: in JS (`terrain.heightAt`, drives physics) and in GLSL (`totalH`, drives
-rendering). They are two implementations of one contract and must agree. If you change the
-sampling in one, change the other; `npm run verify` gate 4 checks they at least share constants,
-but it cannot prove the math matches. **Both render tiers must also include the detail field** —
+**Terrain height is `sampleMain() + mid + detail` — always all three, everywhere.** The
+*generator* runs once into `this.heights` and the GLSL only samples that texture, so the
+feature code (plateau, mesas, terraces, skylight, causeway) has no shader twin to drift from.
+What does exist twice are the three **samplers**: JS (`terrain.heightAt`, drives physics) and
+GLSL (`totalH`, drives rendering). They are two implementations of one contract and must agree.
+If you change the sampling in one, change the other; `npm run verify` gate 4 checks they at
+least share constants, but it cannot prove the math matches. **Both render tiers must also include the detail field** —
 the far mesh originally omitted it, and at grazing angles that ±0.3 m offset made rocks on
 far-side slopes poke over crests as specks floating in the sky.
 
@@ -110,7 +112,7 @@ edge. Fragment-space normals carry all the relief that matters; rocks and the ro
 |---|---|
 | `reach` | `Missions.update` — automatic inside `m.radius` |
 | `drive` | `Missions.update` — M1 special case, 40 m from spawn |
-| `photo` / `devil` | `Instruments.capturePhoto` — M1 / M6 special cases |
+| `photo` / `devil` | `Instruments.capturePhoto` — M1 / M7 special cases |
 | `scan` `drill` `relay` `uplink` | `Instruments.contextAction → start → finish` |
 
 Adding a task id that nothing completes yields a mission that can never advance, and nothing

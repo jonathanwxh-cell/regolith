@@ -53,7 +53,7 @@ export class Story {
   say(who, text, opts = {}) {
     this.queue.push({ who, text, ...opts });
   }
-  saySeq(lines) { for (const [who, text] of lines) this.say(who, text); }
+  saySeq(lines, opts = {}) { for (const [who, text] of lines) this.say(who, text, opts); }
   setFlag(k, v = true) { this.flags[k] = v; }
   has(k) { return !!this.flags[k]; }
 
@@ -78,6 +78,12 @@ export class Story {
     const left = MAX_TUBES - this.tubes.length;
     this.offerChoice(`SEAL A SAMPLE TUBE? "${name}" (${left} tube${left === 1 ? "" : "s"} left)`, "SEAL IT", "LEAVE IT",
       () => {
+        // Re-check at answer time: two offers can queue up behind one pending
+        // choice, and both were sized against the same stale tube count.
+        if (this.tubes.length >= MAX_TUBES) {
+          this.say("SYS", `${name} — no tubes left. We seal what we've got.`);
+          return;
+        }
         this.tubes.push({ name, from });
         this.say("SYS", `Tube ${this.tubes.length} sealed: ${name}. ${MAX_TUBES - this.tubes.length} remaining.`);
         ctx.audio.confirm();
@@ -100,7 +106,7 @@ export class Story {
       if (item.choice) {
         this.pendingChoice = item.choice;
         this.hud.showChoice(item.choice);
-      } else if (this.commsBlackout && item.who !== "ARGO" && item.who !== "OPS") {
+      } else if (this.commsBlackout && !item.always && item.who !== "ARGO" && item.who !== "OPS") {
         // Earth can't hear us — the line is lost to the sun
       } else {
         this.speaking = item;
@@ -150,6 +156,7 @@ export class Story {
     return {
       flags: this.flags, fired: [...this.fired], tubes: this.tubes,
       argoLogsShown: this.argoLogsShown, events: this.events.saveData(),
+      commsBlackout: this.commsBlackout,
     };
   }
   restore(d) {
@@ -159,6 +166,10 @@ export class Story {
     this.tubes = d.tubes || [];
     this.argoLogsShown = d.argoLogsShown || 0;
     this.events.restore(d.events);
+    // Blackout is a paired HUD state — restoring the flag without the banner
+    // leaves the player silently cut off with no on-screen reason.
+    this.commsBlackout = !!d.commsBlackout;
+    if (this.hud) this.hud.setBlackout(this.commsBlackout);
   }
 
   // --------------------------------------------------------------- ending
@@ -177,7 +188,9 @@ export class Story {
     }
     if (this.tubes.length) L.push(["GEO", `${this.tubes.length} tube${this.tubes.length === 1 ? "" : "s"} sealed for return: ${this.tubes.map((t) => t.name).join(", ")}.`]);
     L.push(["FD", "The quad is yours. Keep driving."]);
-    this.saySeq(L);
+    // `always`: the finale must never be swallowed by a comms blackout — the
+    // end screen would otherwise arrive in total silence.
+    this.saySeq(L, { always: true });
     this.setFlag("ending_done");
   }
 }
@@ -260,8 +273,26 @@ class WorldEvents {
     this.conjunction = null; // {start, end} in sol-seconds elapsed
     this.impactSite = null;
   }
-  saveData() { return { done: this.done, impactSite: this.impactSite }; }
-  restore(d) { if (d) { this.done = d.done || {}; this.impactSite = d.impactSite || null; } }
+  // In-flight event state must persist too. Without `conjunction`, a reload
+  // after M6 re-arms the blackout every single time; without `globalStormAt`,
+  // a reload inside the warning window loses the storm for good (its beat has
+  // already fired, so nothing reschedules it).
+  saveData() {
+    return {
+      done: this.done, impactSite: this.impactSite, conjunction: this.conjunction,
+      globalStormAt: this.globalStormAt, transitState: this.transitState,
+    };
+  }
+  restore(d) {
+    if (!d) return;
+    this.done = d.done || {};
+    this.impactSite = d.impactSite || null;
+    this.conjunction = d.conjunction || null;
+    this.globalStormAt = d.globalStormAt ?? null;
+    // A transit interrupted mid-flight resumes from "announced": the sun-disc
+    // override lives on Sky and is not restored, so never resume in "active".
+    this.transitState = d.transitState === "active" ? "announced" : (d.transitState || "idle");
+  }
   scheduleGlobalStorm(inSec) { if (!this.done.globalStorm) this.globalStormAt = inSec; }
 
   update(dt, c) {
@@ -271,16 +302,31 @@ class WorldEvents {
     if (!this.done.impact && c.missions.idx >= 2 && c.sky.nightF > 0.5 && c.elapsed > 120) {
       this.done.impact = true;
       const L = c.layout;
-      let x, z, tries = 0;
-      do {
+      // The old loop fell out at 60 tries and used the last candidate WITHOUT
+      // re-testing it, so an unlucky draw could put the objective on the rim
+      // wall or in a dune trap. Validate, and fall back to guaranteed-reachable
+      // ground rather than shipping an unreachable waypoint.
+      const okSite = (px, pz) => c.terrain.inCrater(px, pz) && c.terrain.isPlayable(px, pz) &&
+        Math.hypot(px - L.lander.x, pz - L.lander.z) > 200 &&
+        c.terrain.maskAtRaw(px, pz, 0) < 0.1 && !c.terrain.inDuneBand(px, pz);
+      let x = 0, z = 0, ok = false;
+      for (let tries = 0; tries < 60 && !ok; tries++) {
         const a = Math.random() * Math.PI * 2, d = 1500 + Math.random() * 900;
         x = c.rover.pos.x + Math.cos(a) * d; z = c.rover.pos.z + Math.sin(a) * d;
-        tries++;
-      } while (tries < 60 && !(c.terrain.inCrater(x, z) && Math.hypot(x - L.lander.x, z - L.lander.z) > 200 &&
-        c.terrain.maskAtRaw(x, z, 0) < 0.1 && !c.terrain.inDuneBand(x, z)));
+        ok = okSite(x, z);
+      }
+      if (!ok) {
+        for (let tries = 0; tries < 200 && !ok; tries++) {
+          const a = Math.random() * Math.PI * 2, d = 300 + Math.random() * 1200;
+          x = L.playa.x + Math.cos(a) * d; z = L.playa.z + Math.sin(a) * d;
+          ok = okSite(x, z);
+        }
+        if (!ok) { x = L.playa.x; z = L.playa.z; }   // last resort: open floor
+      }
       c.terrain.punchCrater(x, z, 18);
       this.impactSite = { x, z };
       c.pois.spawnImpact(x, z);
+      c.missions.customWaypoint = { x, z };   // "Waypoint's on your map" — only on the real event
       const bearing = ((Math.atan2(x - c.rover.pos.x, z - c.rover.pos.z) * 180 / Math.PI) + 360) % 360;
       const range = Math.hypot(x - c.rover.pos.x, z - c.rover.pos.z);
       s.say("OPS", `IMPACT FLASH detected ${c.sky.lmst()} LMST — bearing ${bearing.toFixed(0)}°, range ${(range / 1000).toFixed(1)} km. Seismic confirm.`);

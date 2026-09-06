@@ -85,12 +85,17 @@ check("terrain JS/GLSL samplers share constants", async () => {
     hm: /export const HM = (\d+)/.exec(src)?.[1],
     detN: /export const DETAIL_N = (\d+)/.exec(src)?.[1],
     detSpan: /export const DETAIL_SPAN = (\d+)/.exec(src)?.[1],
+    midN: /export const MID_N = (\d+)/.exec(src)?.[1],
+    midSpan: /export const MID_SPAN = (\d+)/.exec(src)?.[1],
   };
   const glsl = {
     world: /WORLD_M = \$\{WORLD\.toFixed/.test(src),
     hm: /HM_N = \$\{HM\.toFixed/.test(src),
     detN: /DET_N = \$\{DETAIL_N\.toFixed/.test(src),
     detSpan: /DET_SPAN = \$\{DETAIL_SPAN\.toFixed/.test(src),
+    // The mid band was added after this gate was written and went unchecked.
+    midN: /MID_NF = \$\{MID_N\.toFixed/.test(src),
+    midSpan: /MID_SPANF = \$\{MID_SPAN\.toFixed/.test(src),
   };
   const missing = Object.entries(glsl).filter(([, ok]) => !ok).map(([k]) => k);
   if (missing.length) {
@@ -98,7 +103,7 @@ check("terrain JS/GLSL samplers share constants", async () => {
       `       The shader must derive them from the JS exports or physics desyncs from rendering.`);
   }
   if (Object.values(js).some((v) => !v)) throw new Error("terrain constants missing from src/terrain.js");
-  return `WORLD=${js.world} HM=${js.hm} detail=${js.detN}/${js.detSpan}m`;
+  return `WORLD=${js.world} HM=${js.hm} mid=${js.midN}/${js.midSpan}m detail=${js.detN}/${js.detSpan}m`;
 });
 
 // --- Gate 5 (--live): the deployed bytes ARE these bytes.
